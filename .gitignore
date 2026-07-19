@@ -1,25 +1,49 @@
-# Local dependencies and build products
+# Flutter / Dart
 .dart_tool/
+.packages
+.pub-cache/
 build/
+coverage/
+.flutter-plugins
+.flutter-plugins-dependencies
+.fvm/
+
+# Backend / Node.js
 backend/node_modules/
 backend/dist/
 backend/.npm-cache/
-flutter_app/.dart_tool/
-flutter_app/.packages
-flutter_app/build/
-flutter_app/.flutter-plugins*
+backend/.turbo/
+backend/.eslintcache/
+backend/.env
+
+# Android / iOS / macOS / Windows local artifacts
+android/.gradle/
+android/app/debug/
+android/app/release/
+android/local.properties
+ios/Pods/
+ios/.symlinks/
+ios/DerivedData/
+macos/Flutter/ephemeral/
 
 # Secrets, local state, and developer-only analysis
 .env
 .env.*
 !.env.example
+*.pem
+*.p12
+*.key
+*.crt
 terraform.tfstate*
 infra/.terraform/
 work/
 outputs/
 graphify-out/
 
-# Platform/editor material
+# Editor / OS files
 .idea/
 .vscode/
 *.iml
+*.log
+.DS_Store
+Thumbs.db
