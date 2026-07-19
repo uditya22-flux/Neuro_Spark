@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'features/child/presentation/constellation_puzzle_screen.dart';
 import 'features/child/presentation/cooldown_screen.dart';
@@ -10,8 +11,18 @@ import 'features/guardian/presentation/intake_review_screen.dart';
 import 'features/guardian/presentation/guardian_home_screen.dart';
 
 final routerProvider = Provider<GoRouter>((ref) {
+  final client = Supabase.instance.client;
   return GoRouter(
     initialLocation: '/guardian/consent',
+    refreshListenable: GoRouterRefreshStream(client.auth.onAuthStateChange),
+    redirect: (context, state) {
+      final session = client.auth.currentSession;
+      final atConsent = state.matchedLocation == '/guardian/consent';
+      if (session == null) {
+        return atConsent ? null : '/guardian/consent';
+      }
+      return atConsent ? '/guardian/home' : null;
+    },
     routes: <RouteBase>[
       GoRoute(
         path: '/guardian/consent',

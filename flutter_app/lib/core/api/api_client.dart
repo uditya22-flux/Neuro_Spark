@@ -1,17 +1,19 @@
-import 'package:dio/dio.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
-/// One authenticated HTTP boundary. Feature repositories own endpoint details.
+/// One authenticated Supabase boundary. Feature repositories own table and function details.
 class ApiClient {
-  ApiClient({Dio? dio, required String baseUrl})
-      : _dio = dio ?? Dio(BaseOptions(baseUrl: baseUrl));
+  ApiClient({SupabaseClient? client}) : _client = client ?? Supabase.instance.client;
 
-  final Dio _dio;
+  final SupabaseClient _client;
 
-  Future<Response<T>> get<T>(String path, {Map<String, dynamic>? query}) {
-    return _dio.get<T>(path, queryParameters: query);
+  SupabaseClient get supabase => _client;
+
+  Future<void> signOut() async {
+    await _client.auth.signOut();
   }
 
-  Future<Response<T>> post<T>(String path, {Object? data}) {
-    return _dio.post<T>(path, data: data);
+  Future<User?> currentUser() async {
+    final response = await _client.auth.getUser();
+    return response.user;
   }
 }

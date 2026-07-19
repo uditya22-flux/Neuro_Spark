@@ -17,6 +17,43 @@ class AdultExploratoryNote {
   final NoteProvenance provenance;
   final String disclaimer;
   final bool explorationInProgress;
+
+  factory AdultExploratoryNote.fromSupabaseRow({
+    required String childProfileId,
+    required Map<String, Object?> row,
+  }) {
+    final evidenceRows = (row['evidence'] as List? ?? const <Object?>[]).whereType<Map>().toList(growable: false);
+    final evidence = evidenceRows.isEmpty
+        ? <ObservedEvidence>[
+            const ObservedEvidence(activityId: 'supabase', description: 'Generated from Supabase observations.'),
+          ]
+        : evidenceRows
+            .map(
+              (entry) => ObservedEvidence(
+                activityId: entry['activityId']?.toString() ?? entry['activity_id']?.toString() ?? 'activity',
+                description: entry['description']?.toString() ?? entry['text']?.toString() ?? 'Observation',
+              ),
+            )
+            .toList(growable: false);
+    final generatedAt = DateTime.tryParse(row['created_at']?.toString() ?? '') ?? DateTime.now();
+    final track = row['track']?.toString() ?? '';
+    final taxonomy = track.contains('constellation')
+        ? ClosedTaxonomyField.spatialPatternNoticing
+        : ClosedTaxonomyField.chronologicalOrganization;
+    return AdultExploratoryNote(
+      id: row['id']?.toString() ?? '',
+      childProfileId: childProfileId,
+      taxonomy: taxonomy,
+      evidence: evidence,
+      provenance: NoteProvenance(
+        promptVersion: row['prompt_version']?.toString() ?? 'supabase-edge',
+        modelConfiguration: row['model_config']?.toString() ?? 'supabase-edge',
+        generatedAt: generatedAt,
+      ),
+      disclaimer: row['disclaimer']?.toString() ?? illustrativeOnlyDisclaimer,
+      explorationInProgress: row['exploration_in_progress'] as bool? ?? false,
+    );
+  }
 }
 
 enum ClosedTaxonomyField { chronologicalOrganization, spatialPatternNoticing }

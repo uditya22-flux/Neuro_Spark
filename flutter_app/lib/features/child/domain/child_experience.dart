@@ -11,6 +11,63 @@ class ChildExperience {
   final SensoryConfiguration sensory;
   final ChildPuzzlePayload puzzle;
   final ChildCelebration celebration;
+
+  factory ChildExperience.fromSupabase({
+    required String sessionId,
+    required Map<String, Object?> payload,
+  }) {
+    final sensory = Map<String, Object?>.from(payload['sensory'] as Map? ?? const <String, Object?>{});
+    final puzzle = Map<String, Object?>.from(payload['puzzle'] as Map? ?? const <String, Object?>{});
+    final celebration = Map<String, Object?>.from(payload['celebration'] as Map? ?? const <String, Object?>{});
+    return ChildExperience(
+      sessionId: sessionId,
+      sensory: SensoryConfiguration(
+        reduceMotion: sensory['reduceMotion'] as bool? ?? false,
+        soundEnabled: sensory['soundEnabled'] as bool? ?? false,
+        hapticsEnabled: sensory['hapticsEnabled'] as bool? ?? false,
+        highContrast: sensory['highContrast'] as bool? ?? false,
+        themeName: sensory['themeName']?.toString() ?? 'calm',
+      ),
+      puzzle: _buildPuzzle(sessionId: sessionId, puzzle: puzzle),
+      celebration: ChildCelebration(
+        message: celebration['message']?.toString() ?? 'Thanks for exploring in your own way.',
+      ),
+    );
+  }
+
+  static ChildPuzzlePayload _buildPuzzle({
+    required String sessionId,
+    required Map<String, Object?> puzzle,
+  }) {
+    final seed = (puzzle['seed'] as num?)?.toInt() ?? 0;
+    final type = puzzle['type']?.toString() ?? 'timeline';
+    if (type == 'constellation') {
+      final stars = (puzzle['stars'] as List? ?? const <Object?>[])
+          .whereType<Map>()
+          .map(
+            (entry) => ConstellationStar(
+              id: entry['id']?.toString() ?? '',
+              x: (entry['x'] as num?)?.toDouble() ?? 0,
+              y: (entry['y'] as num?)?.toDouble() ?? 0,
+              isDifferent: entry['isDifferent'] as bool? ?? false,
+            ),
+          )
+          .toList(growable: false);
+      return ConstellationPuzzlePayload(id: '$sessionId-constellation', seed: seed, stars: stars);
+    }
+
+    final items = (puzzle['items'] as List? ?? const <Object?>[])
+        .whereType<Map>()
+        .map(
+          (entry) => TimelineItem(
+            id: entry['id']?.toString() ?? '',
+            label: entry['label']?.toString() ?? 'Task',
+            order: (entry['order'] as num?)?.toInt() ?? 0,
+          ),
+        )
+        .toList(growable: false);
+    return TimelinePuzzlePayload(id: '$sessionId-timeline', seed: seed, items: items);
+  }
 }
 
 class SensoryConfiguration {

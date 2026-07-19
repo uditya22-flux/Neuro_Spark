@@ -4,10 +4,10 @@
   "version": "0.1.0",
   "description": "Guardian-led MindBridge private beta API and worker",
   "scripts": {
-    "dev": "tsx watch src/server.ts",
+    "dev": "echo 'MindBridge backend is now Supabase-only. Run the Supabase project in /supabase.'",
     "build": "tsc -p tsconfig.json",
-    "start": "node dist/server.js",
-    "worker": "tsx src/worker.ts",
+    "start": "echo 'Legacy Node backend retired. Use Supabase Edge Functions.' && exit 1",
+    "worker": "echo 'Legacy background worker retired. Use Supabase cron/webhooks.' && exit 1",
     "test": "vitest run",
     "test:watch": "vitest",
     "prisma:generate": "prisma generate",
