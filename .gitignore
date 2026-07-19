@@ -1,0 +1,25 @@
+# Local dependencies and build products
+.dart_tool/
+build/
+backend/node_modules/
+backend/dist/
+backend/.npm-cache/
+flutter_app/.dart_tool/
+flutter_app/.packages
+flutter_app/build/
+flutter_app/.flutter-plugins*
+
+# Secrets, local state, and developer-only analysis
+.env
+.env.*
+!.env.example
+terraform.tfstate*
+infra/.terraform/
+work/
+outputs/
+graphify-out/
+
+# Platform/editor material
+.idea/
+.vscode/
+*.iml

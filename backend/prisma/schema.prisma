@@ -1,0 +1,375 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  GUARDIAN
+  CARE_PROVIDER
+  ADMIN
+}
+
+enum ConsentStatus {
+  PENDING
+  ACTIVE
+  REVOKED
+}
+
+enum ConfigItemStatus {
+  PENDING
+  CONFIRMED
+  REJECTED
+}
+
+enum SafeguardingStatus {
+  OPEN
+  IN_REVIEW
+  RESOLVED
+}
+
+enum Track {
+  CALENDAR_GENIUS
+  CONSTELLATION_MAPPER
+}
+
+enum EventKind {
+  TASK_OPENED
+  TASK_SKIPPED
+  TASK_COMPLETED
+  PAUSE_REQUESTED
+  COOLDOWN_STARTED
+  COOLDOWN_ENDED
+}
+
+enum PurgeStatus {
+  REQUESTED
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+model Guardian {
+  id             String              @id @default(cuid())
+  externalSubject String              @unique
+  email          String              @unique
+  displayName    String?
+  verifiedAt     DateTime?
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+  consents       GuardianConsent[]
+  children       ChildProfile[]
+  intakes        Intake[]
+  grants         CareProviderGrant[]
+  purgeRequests  PurgeRequest[]
+  auditLogs      AuditLog[]          @relation("GuardianAuditLogs")
+}
+
+model CareProvider {
+  id              String              @id @default(cuid())
+  externalSubject String              @unique
+  email           String              @unique
+  displayName     String?
+  active          Boolean             @default(true)
+  createdAt       DateTime            @default(now())
+  grants          CareProviderGrant[]
+}
+
+model ConsentVersion {
+  id          String            @id @default(cuid())
+  version     String            @unique
+  jurisdiction String            @default("IN")
+  documentUrl String
+  active      Boolean           @default(true)
+  createdAt   DateTime          @default(now())
+  consents    GuardianConsent[]
+}
+
+model GuardianConsent {
+  id                String        @id @default(cuid())
+  guardianId        String
+  consentVersionId  String
+  status            ConsentStatus @default(PENDING)
+  verificationRef   String?
+  verifiedAt        DateTime?
+  acceptedAt        DateTime?
+  revokedAt         DateTime?
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+  guardian          Guardian      @relation(fields: [guardianId], references: [id], onDelete: Cascade)
+  consentVersion    ConsentVersion @relation(fields: [consentVersionId], references: [id])
+
+  @@unique([guardianId, consentVersionId])
+  @@index([guardianId, status])
+}
+
+model ChildProfile {
+  id                String                       @id @default(cuid())
+  guardianId        String
+  preferredName     String
+  birthYear         Int
+  createdAt         DateTime                     @default(now())
+  updatedAt         DateTime                     @updatedAt
+  guardian          Guardian                     @relation(fields: [guardianId], references: [id], onDelete: Cascade)
+  sessions          ChildSession[]
+  intakes           Intake[]
+  configItems       SensoryConfigItem[]
+  activeConfigs     ActiveSensoryConfiguration[]
+  playSessions      PlaySession[]
+  events            PlayEvent[]
+  aggregates        ExplorationAggregate[]
+  llmOutputs        LlmOutput[]
+  childReveals      ChildReveal[]
+  adultNotes        AdultExploratoryNote[]
+  grants            CareProviderGrant[]
+  storageObjects    StorageObject[]
+  safetyCases       SafeguardingCase[]
+  purgeRequests     PurgeRequest[]
+
+  @@index([guardianId])
+}
+
+model ChildSession {
+  id          String       @id @default(cuid())
+  childId     String
+  tokenHash   String       @unique
+  issuedAt    DateTime     @default(now())
+  expiresAt   DateTime
+  revokedAt   DateTime?
+  revokeReason String?
+  child       ChildProfile @relation(fields: [childId], references: [id], onDelete: Cascade)
+
+  @@index([childId, expiresAt])
+}
+
+model CareProviderGrant {
+  id             String       @id @default(cuid())
+  guardianId     String
+  childId        String
+  careProviderId String
+  scope          String[]
+  grantedAt      DateTime     @default(now())
+  expiresAt      DateTime
+  revokedAt      DateTime?
+  guardian       Guardian     @relation(fields: [guardianId], references: [id], onDelete: Cascade)
+  child          ChildProfile @relation(fields: [childId], references: [id], onDelete: Cascade)
+  careProvider   CareProvider @relation(fields: [careProviderId], references: [id], onDelete: Cascade)
+
+  @@unique([childId, careProviderId])
+  @@index([careProviderId, expiresAt])
+}
+
+model Intake {
+  id                 String        @id @default(cuid())
+  guardianId         String
+  childId            String
+  encryptedRawText   String
+  redactedText       String
+  confirmedAt        DateTime?
+  expiresAt          DateTime
+  createdAt          DateTime      @default(now())
+  guardian           Guardian      @relation(fields: [guardianId], references: [id], onDelete: Cascade)
+  child              ChildProfile  @relation(fields: [childId], references: [id], onDelete: Cascade)
+  safetyCases        SafeguardingCase[]
+  llmOutputs         LlmOutput[]
+
+  @@index([expiresAt])
+  @@index([childId, createdAt])
+}
+
+model SensoryConfigItem {
+  id            String           @id @default(cuid())
+  childId       String
+  configVersion Int
+  key           String
+  proposedValue Json
+  status        ConfigItemStatus @default(PENDING)
+  reviewedAt    DateTime?
+  createdAt     DateTime         @default(now())
+  child         ChildProfile     @relation(fields: [childId], references: [id], onDelete: Cascade)
+
+  @@unique([childId, configVersion, key])
+  @@index([childId, configVersion, status])
+}
+
+model ActiveSensoryConfiguration {
+  id            String       @id @default(cuid())
+  childId       String
+  configVersion Int
+  configuration Json
+  active        Boolean      @default(true)
+  activatedAt   DateTime     @default(now())
+  child         ChildProfile @relation(fields: [childId], references: [id], onDelete: Cascade)
+
+  @@index([childId, active])
+  @@unique([childId, configVersion])
+}
+
+model PlaySession {
+  id        String       @id @default(cuid())
+  childId   String
+  track     Track
+  seed      String
+  startedAt DateTime     @default(now())
+  endedAt   DateTime?
+  child     ChildProfile @relation(fields: [childId], references: [id], onDelete: Cascade)
+  events    PlayEvent[]
+
+  @@index([childId, track, startedAt])
+}
+
+model PlayEvent {
+  id           String       @id @default(cuid())
+  childId      String
+  playSessionId String
+  kind         EventKind
+  layer        Int
+  payload      Json
+  occurredAt   DateTime     @default(now())
+  expiresAt    DateTime
+  child        ChildProfile @relation(fields: [childId], references: [id], onDelete: Cascade)
+  playSession  PlaySession  @relation(fields: [playSessionId], references: [id], onDelete: Cascade)
+
+  @@index([expiresAt])
+  @@index([childId, occurredAt])
+}
+
+model ExplorationAggregate {
+  id                  String       @id @default(cuid())
+  childId             String
+  track               Track
+  evidence            Json
+  explorationInProgress Boolean    @default(true)
+  calculatedAt        DateTime     @default(now())
+  child               ChildProfile @relation(fields: [childId], references: [id], onDelete: Cascade)
+
+  @@unique([childId, track])
+}
+
+model PromptVersion {
+  id        String      @id @default(cuid())
+  key       String
+  version   String
+  template  String
+  active    Boolean     @default(true)
+  createdAt DateTime    @default(now())
+  outputs   LlmOutput[]
+
+  @@unique([key, version])
+}
+
+model LlmOutput {
+  id             String        @id @default(cuid())
+  childId        String
+  intakeId       String?
+  promptVersionId String
+  channel        String
+  modelConfig    Json
+  schemaVersion  String
+  content        Json
+  createdAt      DateTime      @default(now())
+  child          ChildProfile  @relation(fields: [childId], references: [id], onDelete: Cascade)
+  intake         Intake?       @relation(fields: [intakeId], references: [id], onDelete: SetNull)
+  promptVersion  PromptVersion @relation(fields: [promptVersionId], references: [id])
+
+  @@index([childId, channel, createdAt])
+}
+
+model ChildReveal {
+  id          String       @id @default(cuid())
+  childId     String
+  title       String
+  message     String
+  createdAt   DateTime     @default(now())
+  llmOutputId String       @unique
+  child       ChildProfile @relation(fields: [childId], references: [id], onDelete: Cascade)
+
+  @@index([childId, createdAt])
+}
+
+model AdultExploratoryNote {
+  id               String       @id @default(cuid())
+  childId          String
+  taxonomyKey      String
+  taxonomyVersion  String
+  observations     Json
+  evidence         Json
+  disclaimer       String
+  createdAt        DateTime     @default(now())
+  llmOutputId      String       @unique
+  child            ChildProfile @relation(fields: [childId], references: [id], onDelete: Cascade)
+
+  @@index([childId, createdAt])
+}
+
+model SafeguardingCase {
+  id          String            @id @default(cuid())
+  childId     String
+  intakeId    String
+  reasonCode  String
+  status      SafeguardingStatus @default(OPEN)
+  restricted  Boolean           @default(true)
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+  child       ChildProfile      @relation(fields: [childId], references: [id], onDelete: Cascade)
+  intake      Intake            @relation(fields: [intakeId], references: [id], onDelete: Cascade)
+
+  @@index([status, restricted])
+}
+
+model StorageObject {
+  id        String       @id @default(cuid())
+  childId   String
+  objectKey String       @unique
+  purpose   String
+  createdAt DateTime     @default(now())
+  deletedAt DateTime?
+  child     ChildProfile @relation(fields: [childId], references: [id], onDelete: Cascade)
+
+  @@index([childId, deletedAt])
+}
+
+model PurgeRequest {
+  id           String      @id @default(cuid())
+  guardianId   String
+  childId      String?
+  status       PurgeStatus @default(REQUESTED)
+  requestedAt  DateTime    @default(now())
+  completedAt  DateTime?
+  failureReason String?
+  guardian     Guardian    @relation(fields: [guardianId], references: [id], onDelete: Cascade)
+  child        ChildProfile? @relation(fields: [childId], references: [id], onDelete: Cascade)
+
+  @@index([status, requestedAt])
+}
+
+model OutboxEvent {
+  id          String    @id @default(cuid())
+  type        String
+  aggregateId String
+  payload     Json
+  availableAt DateTime  @default(now())
+  processedAt DateTime?
+  attempts    Int       @default(0)
+  createdAt   DateTime  @default(now())
+
+  @@index([processedAt, availableAt])
+}
+
+model AuditLog {
+  id         String    @id @default(cuid())
+  guardianId String?
+  childId    String?
+  actorType  String
+  actorId    String
+  action     String
+  metadata   Json
+  createdAt  DateTime  @default(now())
+  guardian   Guardian? @relation("GuardianAuditLogs", fields: [guardianId], references: [id], onDelete: SetNull)
+
+  @@index([guardianId, createdAt])
+  @@index([childId, createdAt])
+}
