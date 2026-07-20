@@ -1,0 +1,26 @@
+project_id = "mindbridge"
+
+[functions.create-child]
+verify_jwt = true
+[functions.submit-intake]
+verify_jwt = true
+[functions.issue-session]
+verify_jwt = true
+[functions.revoke-session]
+verify_jwt = true
+[functions.privacy-export]
+verify_jwt = true
+[functions.privacy-purge]
+verify_jwt = true
+[functions.trigger-event]
+verify_jwt = true
+[functions.dispatch-trigger]
+verify_jwt = false
+[functions.dispatch-fcm]
+verify_jwt = false
+[functions.sms-hook]
+verify_jwt = false
+[functions.digilocker-init]
+verify_jwt = true
+[functions.digilocker-callback]
+verify_jwt = false

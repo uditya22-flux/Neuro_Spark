@@ -7,7 +7,8 @@ product.
 
 ## Layout
 
-- `backend/` — Express/TypeScript API, Prisma/PostgreSQL schema, worker, and OpenAPI contract.
+- `backend/` — legacy Express/Prisma implementation retained for migration reference; not the production request path.
+- `supabase/` — production data, RLS, RPCs, Realtime, and Edge Functions.
 - `flutter_app/` — Guardian and child Flutter client.
 - `infra/` — AWS Mumbai Terraform foundation.
 
@@ -15,10 +16,9 @@ product.
 
 1. Copy `backend/.env.example` to a non-committed `.env` file and use only
    synthetic development data.
-2. Start PostgreSQL and Redis using the included compose configuration.
-3. From `backend`, install dependencies, generate the Prisma client, run the
-   migration, then start the API and worker in separate terminals.
-4. From `flutter_app`, fetch packages and run the Flutter client.
+2. Create/link a Supabase project and run `supabase db push` from `supabase/`.
+3. Configure the Edge Function secrets and database webhook described in `supabase/README.md`.
+4. From `flutter_app`, fetch packages and run the Flutter client with `SUPABASE_URL` and `SUPABASE_ANON_KEY`.
 
 The initial migration includes a PostgreSQL trigger that rejects activation of
 any sensory configuration until every item has explicit guardian confirmation.
