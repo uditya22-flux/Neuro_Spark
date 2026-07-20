@@ -24,6 +24,7 @@ class SduiState {
   final SensoryConfig sensoryConfig;
   final bool isAacMode;
   final String activeProfileName;
+  final Map<String, dynamic> dynamicGenUiSchema;
 
   const SduiState({
     required this.profile,
@@ -32,6 +33,7 @@ class SduiState {
     required this.sensoryConfig,
     required this.isAacMode,
     required this.activeProfileName,
+    required this.dynamicGenUiSchema,
   });
 
   SduiState copyWith({
@@ -41,6 +43,7 @@ class SduiState {
     SensoryConfig? sensoryConfig,
     bool? isAacMode,
     String? activeProfileName,
+    Map<String, dynamic>? dynamicGenUiSchema,
   }) {
     return SduiState(
       profile: profile ?? this.profile,
@@ -49,6 +52,7 @@ class SduiState {
       sensoryConfig: sensoryConfig ?? this.sensoryConfig,
       isAacMode: isAacMode ?? this.isAacMode,
       activeProfileName: activeProfileName ?? this.activeProfileName,
+      dynamicGenUiSchema: dynamicGenUiSchema ?? this.dynamicGenUiSchema,
     );
   }
 }
@@ -57,6 +61,73 @@ class SduiController extends StateNotifier<SduiState> {
   SduiController() : super(_initialState()) {
     // Initial state setup with Profile 1
     loadProfileByName('Profile 1: Space Explorer');
+  }
+
+  static Map<String, dynamic> generateDynamicGenUiSchema(NeuroProfile profile) {
+    final name = profile.userProfile.name;
+    final fixation = profile.strengthsSpecialInterests.primaryHyperFixation.toLowerCase();
+    final favPlace = profile.affinities.favoritePlace;
+    final abilities = profile.strengthsSpecialInterests.naturalAbilities;
+
+    String mascot = 'rocket';
+    String titlePrefix = 'Space Explorer';
+    String challengeTitle = 'Orbital Exploration Path';
+    if (fixation.contains('dinosaur') || fixation.contains('paleontology') || fixation.contains('fossil')) {
+      mascot = 'dinosaur';
+      titlePrefix = 'Dinosaur Excavator';
+      challengeTitle = 'Fossil Dig Pattern Challenge';
+    } else if (fixation.contains('train') || fixation.contains('railway') || fixation.contains('locomotive')) {
+      mascot = 'train';
+      titlePrefix = 'Train Conductor';
+      challengeTitle = 'Metro Routing & Schedule Puzzle';
+    } else if (fixation.contains('marine') || fixation.contains('ocean') || fixation.contains('aquarium')) {
+      mascot = 'sea_turtle';
+      titlePrefix = 'Aquarium Explorer';
+      challengeTitle = 'Marine Ecosystem Explorer';
+    } else if (fixation.contains('coding') || fixation.contains('microcontroller') || fixation.contains('logic')) {
+      mascot = 'code';
+      titlePrefix = 'Logic Coder';
+      challengeTitle = 'Algorithmic Logic Challenge';
+    }
+
+    return {
+      'type': 'column',
+      'children': [
+        {
+          'type': 'mascot_header',
+          'title': 'Hello, $name!',
+          'subtitle': 'Personalized for your $fixation interests and $favPlace surroundings.',
+          'mascot': mascot,
+          'theme_label': '$titlePrefix Theme Active',
+        },
+        {'type': 'spacer', 'height': 16.0},
+        {
+          'type': 'challenge_card',
+          'title': '$name\'s Talent Growth',
+          'target_challenge': challengeTitle,
+          'icon': mascot,
+          'strengths': abilities.isNotEmpty ? abilities : ['Pattern Recognition', 'Systematic Logic'],
+        },
+        {'type': 'spacer', 'height': 16.0},
+        {
+          'type': 'breathing_engine',
+          'technique': '4-4-4 Breathing Engine',
+          'location': 'Calm Space at $favPlace',
+          'audio_anchor': 'Soft Rain & Ambient Brown Noise (432Hz)',
+        },
+        {'type': 'spacer', 'height': 16.0},
+        {
+          'type': 'tactile_sound_pad',
+          'title': 'Sensory Audio Pad',
+          'subtitle': 'Designed for fidgeting & active auditory stimulation',
+          'buttons': [
+            {'label': 'Chime', 'icon': 'audio'},
+            {'label': 'Vibrate', 'icon': 'music'},
+            {'label': 'Focus', 'icon': 'check'},
+          ],
+        },
+      ],
+    };
   }
 
   static SduiState _initialState() {
@@ -68,6 +139,7 @@ class SduiController extends StateNotifier<SduiState> {
       sensoryConfig: const SensoryConfig(),
       isAacMode: false,
       activeProfileName: 'Profile 1: Space Explorer',
+      dynamicGenUiSchema: generateDynamicGenUiSchema(defaultProfile),
     );
   }
 
@@ -89,6 +161,9 @@ class SduiController extends StateNotifier<SduiState> {
     // 4. Configure Communication Preference
     final isAacMode = profile.communicationEmotion.stressCommunicationStyle == 'aac_pictograms';
 
+    // 5. Generate Dynamic GenUI Schema
+    final dynamicSchema = generateDynamicGenUiSchema(profile);
+
     state = SduiState(
       profile: profile,
       layoutOrder: layoutOrder,
@@ -96,6 +171,7 @@ class SduiController extends StateNotifier<SduiState> {
       sensoryConfig: sensoryConfig,
       isAacMode: isAacMode,
       activeProfileName: name,
+      dynamicGenUiSchema: dynamicSchema,
     );
   }
 
@@ -114,6 +190,9 @@ class SduiController extends StateNotifier<SduiState> {
       final isAacMode = customProfile.communicationEmotion.stressCommunicationStyle == 'aac_pictograms' || 
                         customProfile.communicationEmotion.stressCommunicationStyle == 'uses_aac_devices';
 
+      // 5. Generate Dynamic GenUI Schema
+      final dynamicSchema = generateDynamicGenUiSchema(customProfile);
+
       state = SduiState(
         profile: customProfile,
         layoutOrder: layoutOrder,
@@ -121,6 +200,7 @@ class SduiController extends StateNotifier<SduiState> {
         sensoryConfig: sensoryConfig,
         isAacMode: isAacMode,
         activeProfileName: 'Custom Profile: ${customProfile.userProfile.name}',
+        dynamicGenUiSchema: dynamicSchema,
       );
     } catch (e) {
       debugPrint('ERROR: Intake profile parsing or layout calculation failed: $e. Defaulting to safe baseline layout.');

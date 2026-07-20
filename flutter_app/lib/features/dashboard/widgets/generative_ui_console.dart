@@ -146,9 +146,7 @@ class _GenerativeUiConsoleState extends ConsumerState<GenerativeUiConsole> {
                     ),
                   ),
                 )
-              : (_generatedSchema != null
-                  ? GenUiParser(schema: _generatedSchema!)
-                  : const SizedBox.shrink()),
+              : GenUiParser(schema: _generatedSchema ?? sduiState.dynamicGenUiSchema),
         ),
       ],
     );
