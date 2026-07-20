@@ -1,4 +1,7 @@
+import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:http/http.dart' as http;
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'supabase_service.dart';
 
@@ -28,10 +31,17 @@ class StrengthProfile {
 class AiEdgeService {
   final SupabaseService _supabaseService;
 
+  // Groq API Key (Configurable via environment or fallback default key)
+  static const String _groqApiKey = String.fromEnvironment(
+    'GROQ_API_KEY',
+    defaultValue: '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',
+  );
+
+  static const String _groqEndpoint = 'https://api.groq.com/openai/v1/chat/completions';
+
   AiEdgeService(this._supabaseService);
 
   /// Invokes 'onboarding-ai' Edge Function.
-  /// Sends parent questionnaire map responses and returns the custom dashboard layout JSON.
   Future<Map<String, dynamic>> getOnboardingLayout({
     required Map<String, dynamic> questionnaireAnswers,
   }) async {
@@ -54,7 +64,6 @@ class AiEdgeService {
         throw Exception('onboarding-ai function error status: ${response.status}');
       }
     } catch (e) {
-      // Return a fallback sensory layout config in case of connection issues
       return {
         'module_order': ['schedule', 'scanner', 'talent'],
         'high_auditory_risk': false,
@@ -65,8 +74,6 @@ class AiEdgeService {
   }
 
   /// Invokes 'talent-ai' Edge Function.
-  /// Sends puzzle game telemetry vectors (e.g. click counts, completion speed, correct/incorrect match cycles)
-  /// and returns a formal StrengthProfile payload.
   Future<StrengthProfile> analyzeGameTelemetry({
     required List<Map<String, dynamic>> telemetryVectors,
   }) async {
@@ -89,7 +96,6 @@ class AiEdgeService {
         throw Exception('talent-ai function error status: ${response.status}');
       }
     } catch (e) {
-      // Fallback StrengthProfile for design demonstration
       return const StrengthProfile(
         primaryStrength: 'Visual Pattern Recognition (Offline Demo)',
         cognitiveMarkers: ['High Visual Persistence', 'Rapid Spatial Sorting', 'Attention to Micro-details'],
@@ -99,120 +105,127 @@ class AiEdgeService {
     }
   }
 
-  /// Generates dynamic UI JSON layouts matching natural language user prompts.
+  /// Generates dynamic UI JSON layouts using Groq AI LPU (`llama-3.3-70b-versatile`).
   Future<Map<String, dynamic>> generateUiFromPrompt(String prompt) async {
-    // In a production app, we would invoke an AI edge function passing the prompt
-    // to dynamic widget compilers. For this implementation, we parse keys locally.
+    try {
+      debugPrint('[AiEdgeService] Invoking Groq LPU API for prompt: "$prompt"');
+
+      final systemPrompt = '''
+You are a Generative UI Engine for neurodivergent accessibility. You MUST return ONLY a valid JSON object matching the GenUI parser schema.
+Available node types:
+- mascot_header: { "type": "mascot_header", "title": string, "subtitle": string, "mascot": "rocket"|"dinosaur"|"train"|"sea_turtle"|"code", "theme_label": string }
+- challenge_card: { "type": "challenge_card", "title": string, "target_challenge": string, "icon": string, "strengths": string[] }
+- breathing_engine: { "type": "breathing_engine", "technique": string, "location": string, "audio_anchor": string }
+- tactile_sound_pad: { "type": "tactile_sound_pad", "title": string, "subtitle": string, "buttons": [{"label": string, "icon": "audio"|"music"|"check"}] }
+- card, row, column, text, icon, button, glow_ring, spacer
+
+Return a root JSON object: { "type": "column", "children": [...] } tailored to the prompt.
+''';
+
+      final response = await http.post(
+        Uri.parse(_groqEndpoint),
+        headers: {
+          'Authorization': 'Bearer $_groqApiKey',
+          'Content-Type': 'application/json',
+        },
+        body: jsonEncode({
+          'model': 'llama-3.3-70b-versatile',
+          'response_format': {'type': 'json_object'},
+          'temperature': 0.5,
+          'messages': [
+            {'role': 'system', 'content': systemPrompt},
+            {'role': 'user', 'content': 'Generate a personalized accessibility UI layout for: $prompt'}
+          ],
+        }),
+      ).timeout(const Duration(seconds: 8));
+
+      if (response.statusCode == 200) {
+        final bodyJson = jsonDecode(response.body) as Map<String, dynamic>;
+        final choices = bodyJson['choices'] as List?;
+        if (choices != null && choices.isNotEmpty) {
+          final contentStr = choices[0]['message']['content'] as String;
+          final schema = jsonDecode(contentStr) as Map<String, dynamic>;
+          debugPrint('[AiEdgeService] Successfully received dynamic Groq AI schema');
+          return schema;
+        }
+      }
+    } catch (e) {
+      debugPrint('[AiEdgeService] Groq API call error: $e. Falling back to local rules engine.');
+    }
+
+    // Fallback schema generator if offline or network error occurs
+    return _getLocalFallbackSchema(prompt);
+  }
+
+  Map<String, dynamic> _getLocalFallbackSchema(String prompt) {
     final lowercasePrompt = prompt.toLowerCase();
-    
-    // Simulate short latency
-    await Future.delayed(const Duration(milliseconds: 600));
 
     if (lowercasePrompt.contains('noise') || 
         lowercasePrompt.contains('overwhelm') || 
         lowercasePrompt.contains('calm') || 
         lowercasePrompt.contains('breathe')) {
       return {
-        'type': 'card',
+        'type': 'column',
         'children': [
           {
-            'type': 'row',
-            'children': [
-              {'type': 'icon', 'icon': 'spa_rounded'},
-              {'type': 'spacer', 'width': 8.0},
-              {'type': 'text', 'value': 'AI Calm Space: Breathe Guide', 'is_header': true}
-            ]
+            'type': 'mascot_header',
+            'title': 'AI Calm Sanctuary',
+            'subtitle': 'Deep visual breathing cycle configured to lower sensory over-activation.',
+            'mascot': 'sea_turtle',
+            'theme_label': 'Calm Corner Mode',
           },
-          {'type': 'spacer', 'height': 12.0},
-          {'type': 'text', 'value': 'Let\'s do a quiet visual breathing cycle. Match your breaths to the pulsing circle below to lower sensory activation.', 'is_header': false},
           {'type': 'spacer', 'height': 16.0},
-          {'type': 'glow_ring'},
-          {'type': 'spacer', 'height': 16.0},
-          {'type': 'button', 'label': 'Start Silent Vibration', 'action': 'trigger_vibration_tap'}
+          {
+            'type': 'breathing_engine',
+            'technique': '4-4-4 Visual Breathing Engine',
+            'location': 'Marayoor Sandalwood Forest',
+            'audio_anchor': 'Soft Rain & Ambient Brown Noise (432Hz)',
+          },
         ]
       };
-    } else if (lowercasePrompt.contains('train') || 
-               lowercasePrompt.contains('railway') || 
-               lowercasePrompt.contains('track')) {
+    } else if (lowercasePrompt.contains('train') || lowercasePrompt.contains('railway')) {
       return {
-        'type': 'card',
+        'type': 'column',
         'children': [
           {
-            'type': 'row',
-            'children': [
-              {'type': 'icon', 'icon': 'train_rounded'},
-              {'type': 'spacer', 'width': 8.0},
-              {'type': 'text', 'value': 'AI Train Junction Tool', 'is_header': true}
-            ]
+            'type': 'mascot_header',
+            'title': 'AI Train Conductor Station',
+            'subtitle': 'Route steam locomotive coupling and track switches.',
+            'mascot': 'train',
+            'theme_label': 'Train Conductor Mode',
           },
-          {'type': 'spacer', 'height': 12.0},
-          {'type': 'text', 'value': 'Route 9 Express steam locomotive coupling is verified. Connect track switches to start passenger simulation.', 'is_header': false},
           {'type': 'spacer', 'height': 16.0},
           {
-            'type': 'row',
-            'children': [
-              {'type': 'button', 'label': 'Play Horn Chime', 'action': 'play_chime'},
-              {'type': 'spacer', 'width': 12.0},
-              {'type': 'button', 'label': 'Engage Haptics', 'action': 'trigger_vibration_tap'}
-            ]
-          }
-        ]
-      };
-    } else if (lowercasePrompt.contains('dino') || 
-               lowercasePrompt.contains('fossil') || 
-               lowercasePrompt.contains('dig')) {
-      return {
-        'type': 'card',
-        'children': [
-          {
-            'type': 'row',
-            'children': [
-              {'type': 'icon', 'icon': 'terrain_rounded'},
-              {'type': 'spacer', 'width': 8.0},
-              {'type': 'text', 'value': 'AI Fossil Dig Site Specimen', 'is_header': true}
-            ]
+            'type': 'tactile_sound_pad',
+            'title': 'Train Engine Status & Whistle Pad',
+            'subtitle': 'Tap for locomotive audio chimes and haptic feedback',
+            'buttons': [
+              {'label': 'Horn', 'icon': 'audio'},
+              {'label': 'Whistle', 'icon': 'music'},
+              {'label': 'Engine', 'icon': 'check'},
+            ],
           },
-          {'type': 'spacer', 'height': 12.0},
-          {'type': 'text', 'value': 'Stratum layer 4 fossils cataloged: Triceratops rib fragment found. Tap brush to clean specimen.', 'is_header': false},
-          {'type': 'spacer', 'height': 16.0},
-          {'type': 'button', 'label': 'Clean Specimen with Soft Haptics', 'action': 'trigger_vibration_tap'}
-        ]
-      };
-    } else if (lowercasePrompt.contains('code') || 
-               lowercasePrompt.contains('logic') || 
-               lowercasePrompt.contains('program')) {
-      return {
-        'type': 'card',
-        'children': [
-          {
-            'type': 'row',
-            'children': [
-              {'type': 'icon', 'icon': 'terminal_rounded'},
-              {'type': 'spacer', 'width': 8.0},
-              {'type': 'text', 'value': 'AI Logic Compiler Node', 'is_header': true}
-            ]
-          },
-          {'type': 'spacer', 'height': 12.0},
-          {'type': 'text', 'value': 'Define conditional flow: If safeMode active, set volume limit to 0 decibels.', 'is_header': false},
-          {'type': 'spacer', 'height': 16.0},
-          {'type': 'button', 'label': 'Compile & Run Logic Block', 'action': 'play_chime'}
         ]
       };
     } else {
-      // General sensory assistance fallback
       return {
-        'type': 'card',
+        'type': 'column',
         'children': [
           {
-            'type': 'row',
-            'children': [
-              {'type': 'icon', 'icon': 'help_outline_rounded'},
-              {'type': 'spacer', 'width': 8.0},
-              {'type': 'text', 'value': 'AI Sensory Assistant Helper', 'is_header': true}
-            ]
+            'type': 'mascot_header',
+            'title': 'AI Sensory Assistant',
+            'subtitle': 'Custom regulation interface generated for: "$prompt"',
+            'mascot': 'rocket',
+            'theme_label': 'Sensory Assistant Mode',
           },
-          {'type': 'spacer', 'height': 12.0},
-          {'type': 'text', 'value': 'I can construct custom regulation widgets for you. Try asking for a "quiet breathing space", a "train challenge", "dinosaur fossil tool", or a "coding loop".', 'is_header': false}
+          {'type': 'spacer', 'height': 16.0},
+          {
+            'type': 'challenge_card',
+            'title': 'Personalized Focus Node',
+            'target_challenge': 'Adaptive Learning Task for $prompt',
+            'icon': 'rocket',
+            'strengths': ['Pattern Recognition', 'System Logic'],
+          },
         ]
       };
     }

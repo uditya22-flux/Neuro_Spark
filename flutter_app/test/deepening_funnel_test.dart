@@ -3,10 +3,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mindbridge_app/features/deepening/models/deepening_task_payload.dart';
 import 'package:mindbridge_app/features/deepening/models/telemetry_payload.dart';
-import 'package:mindbridge_app/features/deepening/providers/deepening_controller.dart';
 import 'package:mindbridge_app/features/deepening/presentation/deepening_funnel_canvas.dart';
 import 'package:mindbridge_app/features/deepening/presentation/widgets/calendar_genius_task_widget.dart';
-import 'package:mindbridge_app/features/deepening/presentation/widgets/constellation_mapper_task_widget.dart';
 import 'package:mindbridge_app/core/router/app_router.dart';
 
 void main() {
