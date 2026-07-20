@@ -126,7 +126,7 @@ class SupabaseGuardianRepository implements GuardianRepository {
 
     _checkError(response, 'loadExploratoryNote');
 
-    final row = response as Map<String, dynamic>;
+    final row = response;
     return AdultExploratoryNote(
       id: row['id'] as String,
       childProfileId: row['child_id'] as String,
