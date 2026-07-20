@@ -2,14 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/onboarding_state.dart';
 import '../../dashboard/providers/sdui_controller.dart';
 import '../../dashboard/models/neuro_profile.dart';
-
-class SupabaseEdgeWorker {
-  static Future<bool> initializeRuntimeTheme(Map<String, dynamic> payload) async {
-    // Simulate Supabase Edge Worker execution latency (500ms)
-    await Future.delayed(const Duration(milliseconds: 500));
-    return true;
-  }
-}
+import '../../../core/api/supabase_api.dart';
 
 class OnboardingController extends StateNotifier<OnboardingState> {
   final Ref ref;
@@ -43,8 +36,8 @@ class OnboardingController extends StateNotifier<OnboardingState> {
 
   Future<bool> completeSetup() async {
     final payload = state.toJson();
-    final success = await SupabaseEdgeWorker.initializeRuntimeTheme(payload);
-    if (success) {
+    final response = await ref.read(supabaseApiProvider).submitIntake(payload);
+    if (response['status'] == 'success' || response['local'] == true || response['fallback'] == true) {
       final profile = NeuroProfile.fromJson(payload);
       ref.read(sduiControllerProvider.notifier).loadCustomProfile(profile);
       return true;
