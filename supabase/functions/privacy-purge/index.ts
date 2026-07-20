@@ -110,6 +110,15 @@ async function performCascadeDelete(
     if (childId) {
       // Child-scoped purge
       await svc.from('discovery_intakes').delete().eq('child_id', childId);
+      await svc.from('deepening_profiles').delete().eq('child_id', childId);
+      await svc.from('consistency_window').delete().eq('child_id', childId);
+      await svc.from('support_ladder_log').delete().eq('child_id', childId);
+      await svc.from('layer_task_execution').delete().eq('child_id', childId);
+      await svc.from('layer_progression_state').delete().eq('child_id', childId);
+      await svc.from('stage2_handoffs').delete().eq('child_id', childId);
+      await svc.from('sublayer_telemetry').delete().eq('child_id', childId);
+      await svc.from('vertical_task_bank').delete().eq('child_id', childId);
+      await svc.from('layer1_sessions').delete().eq('child_id', childId);
       await svc.from('sensory_configurations').delete().eq('child_id', childId);
       await svc.from('child_experience').delete().eq('child_id', childId);
       await svc.from('adult_exploratory_note').delete().eq('child_id', childId);
@@ -125,6 +134,15 @@ async function performCascadeDelete(
       const childIds = (children ?? []).map((c: { id: string }) => c.id);
       if (childIds.length > 0) {
         await svc.from('discovery_intakes').delete().in('child_id', childIds);
+        await svc.from('deepening_profiles').delete().in('child_id', childIds);
+        await svc.from('consistency_window').delete().in('child_id', childIds);
+        await svc.from('support_ladder_log').delete().in('child_id', childIds);
+        await svc.from('layer_task_execution').delete().in('child_id', childIds);
+        await svc.from('layer_progression_state').delete().in('child_id', childIds);
+        await svc.from('stage2_handoffs').delete().in('child_id', childIds);
+        await svc.from('sublayer_telemetry').delete().in('child_id', childIds);
+        await svc.from('vertical_task_bank').delete().in('child_id', childIds);
+        await svc.from('layer1_sessions').delete().in('child_id', childIds);
         await svc.from('sensory_configurations').delete().in('child_id', childIds);
         await svc.from('child_experience').delete().in('child_id', childIds);
         await svc.from('adult_exploratory_note').delete().in('child_id', childIds);

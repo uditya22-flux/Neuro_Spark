@@ -24,3 +24,15 @@ verify_jwt = false
 verify_jwt = true
 [functions.digilocker-callback]
 verify_jwt = false
+[functions.layer1-tasks]
+verify_jwt = true
+[functions.layer1-submit-response]
+verify_jwt = true
+[functions.deepening-next-task]
+verify_jwt = true
+[functions.deepening-submit-response]
+verify_jwt = true
+[functions.deepening-progress]
+verify_jwt = true
+[functions.deepening-profile]
+verify_jwt = true

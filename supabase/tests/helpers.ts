@@ -119,6 +119,15 @@ export async function cleanupGuardian(guardianId: string): Promise<void> {
   const ids = (children ?? []).map((c: { id: string }) => c.id);
   if (ids.length > 0) {
     await svc.from('discovery_intakes').delete().in('child_id', ids);
+    await svc.from('deepening_profiles').delete().in('child_id', ids);
+    await svc.from('consistency_window').delete().in('child_id', ids);
+    await svc.from('support_ladder_log').delete().in('child_id', ids);
+    await svc.from('layer_task_execution').delete().in('child_id', ids);
+    await svc.from('layer_progression_state').delete().in('child_id', ids);
+    await svc.from('stage2_handoffs').delete().in('child_id', ids);
+    await svc.from('sublayer_telemetry').delete().in('child_id', ids);
+    await svc.from('vertical_task_bank').delete().in('child_id', ids);
+    await svc.from('layer1_sessions').delete().in('child_id', ids);
     await svc.from('sensory_configurations').delete().in('child_id', ids);
     await svc.from('child_experience').delete().in('child_id', ids);
     await svc.from('adult_exploratory_note').delete().in('child_id', ids);

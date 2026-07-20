@@ -1,6 +1,8 @@
 import { createClient, SupabaseClient, User } from 'https://esm.sh/@supabase/supabase-js@2';
 import { corsHeaders } from './cors.ts';
 
+export { corsHeaders };
+
 // ---------------------------------------------------------------------------
 // Client builders
 // ---------------------------------------------------------------------------
