@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:firebase_core/firebase_core.dart';
 import 'core/theme/app_theme.dart';
 import 'core/theme/safe_mode_provider.dart';
 import 'core/services/supabase_service.dart';
@@ -21,19 +20,7 @@ void main() async {
     await SupabaseService.initialize();
   }
 
-  // Initialize Firebase with placeholder options for startup configuration
-  try {
-    await Firebase.initializeApp(
-      options: const FirebaseOptions(
-        apiKey: "AIzaSyDummyApiKeyPlaceholder12345",
-        appId: "1:1234567890:android:abc123dummyapp",
-        messagingSenderId: "1234567890",
-        projectId: "neurospark-dummy-project",
-      ),
-    );
-  } catch (e) {
-    debugPrint('Firebase initialization error: $e');
-  }
+  // Firebase initialization has been skipped since FCM is charter-blocked and breaks web builds.
 
   // Create ProviderContainer for initializing non-widget-scoped services.
   final container = ProviderContainer();
