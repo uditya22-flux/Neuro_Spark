@@ -65,9 +65,9 @@ class SduiController extends StateNotifier<SduiState> {
 
   static Map<String, dynamic> generateDynamicGenUiSchema(NeuroProfile profile) {
     final name = profile.userProfile.name;
-    final fixation = profile.strengthsSpecialInterests.primaryHyperFixation.toLowerCase();
+    final fixation = profile.interests.primaryHyperFixation.toLowerCase();
     final favPlace = profile.affinities.favoritePlace;
-    final abilities = profile.strengthsSpecialInterests.naturalAbilities;
+    final abilities = profile.interests.naturalAbilities;
 
     String mascot = 'rocket';
     String titlePrefix = 'Space Explorer';
