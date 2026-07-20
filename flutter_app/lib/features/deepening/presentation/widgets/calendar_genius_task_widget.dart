@@ -61,25 +61,29 @@ class _CalendarGeniusTaskWidgetState extends State<CalendarGeniusTaskWidget> {
     if (_selectedDay == null) return;
 
     final correctAnswer = widget.payload.taskData['correct_day'] as String? ?? 'Monday';
-
     final isCorrect = _selectedDay!.toLowerCase() == correctAnswer.toLowerCase();
 
-    if (!isCorrect) {
-      HapticFeedback.heavyImpact();
-      setState(() {
-        _errorCount++;
-      });
+    HapticFeedback.mediumImpact();
+
+    final double accuracy;
+    if (isCorrect) {
+      accuracy = _errorCount == 0 ? 1.0 : (1.0 / (_errorCount + 1));
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Not quite right. Try analyzing the calendar pattern again!'),
+          content: Text('Great job! Advancing to next layer...'),
           duration: Duration(seconds: 1),
         ),
       );
-      return;
+    } else {
+      accuracy = 0.2;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Response recorded! Adapting next layer task...'),
+          duration: Duration(seconds: 1),
+        ),
+      );
     }
 
-    HapticFeedback.mediumImpact();
-    final accuracy = _errorCount == 0 ? 1.0 : (1.0 / (_errorCount + 1));
     widget.onSubmit(
       accuracy: accuracy,
       response: _selectedDay!,

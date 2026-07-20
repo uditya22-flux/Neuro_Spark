@@ -55,22 +55,27 @@ class _ConstellationMapperTaskWidgetState extends State<ConstellationMapperTaskW
     final requiredCount = widget.payload.taskData['required_stars'] as int? ?? 4;
     final isCorrect = _connectedStarIds.length == requiredCount;
 
-    if (!isCorrect) {
-      HapticFeedback.heavyImpact();
-      setState(() {
-        _errorCount++;
-      });
+    HapticFeedback.mediumImpact();
+
+    final double accuracy;
+    if (isCorrect) {
+      accuracy = _errorCount == 0 ? 1.0 : (1.0 / (_errorCount + 1));
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Constellation pattern needs $requiredCount connected stars. Try again!'),
-          duration: const Duration(seconds: 1),
+        const SnackBar(
+          content: Text('Great job! Advancing to next layer...'),
+          duration: Duration(seconds: 1),
         ),
       );
-      return;
+    } else {
+      accuracy = 0.4;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Response recorded! Adapting next layer task...'),
+          duration: Duration(seconds: 1),
+        ),
+      );
     }
 
-    HapticFeedback.mediumImpact();
-    final accuracy = _errorCount == 0 ? 1.0 : (1.0 / (_errorCount + 1));
     widget.onSubmit(
       accuracy: accuracy,
       response: 'connected_stars_${_connectedStarIds.join("_")}',
