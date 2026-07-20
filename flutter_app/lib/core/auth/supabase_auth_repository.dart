@@ -1,0 +1,22 @@
+import 'package:supabase_flutter/supabase_flutter.dart';
+
+/// Guardian authentication is Supabase Auth; no bespoke verify-parent API exists.
+class SupabaseAuthRepository {
+  SupabaseClient get _client => Supabase.instance.client;
+
+  Future<void> sendEmailOtp(String email) =>
+      _client.auth.signInWithOtp(email: email);
+
+  Future<void> sendPhoneOtp(String phone) =>
+      _client.auth.signInWithOtp(phone: phone);
+
+  Future<AuthResponse> verifyEmailOtp(String email, String token) =>
+      _client.auth.verifyOTP(type: OtpType.email, email: email, token: token);
+
+  Future<AuthResponse> verifyPhoneOtp(String phone, String token) =>
+      _client.auth.verifyOTP(type: OtpType.sms, phone: phone, token: token);
+
+  Future<void> signOut() => _client.auth.signOut();
+
+  Stream<AuthState> get authChanges => _client.auth.onAuthStateChange;
+}

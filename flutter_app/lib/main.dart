@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'core/theme/app_theme.dart';
 import 'core/theme/safe_mode_provider.dart';
@@ -11,8 +12,14 @@ import 'features/onboarding/widgets/neuro_spark_intake_flow.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Initialize Supabase Connectivity
-  await SupabaseService.initialize();
+  // Initialize Supabase Connectivity (from environment or default fallback)
+  const url = String.fromEnvironment('SUPABASE_URL');
+  const anonKey = String.fromEnvironment('SUPABASE_ANON_KEY');
+  if (url.isNotEmpty && anonKey.isNotEmpty) {
+    await Supabase.initialize(url: url, anonKey: anonKey);
+  } else {
+    await SupabaseService.initialize();
+  }
 
   // Initialize Firebase with placeholder options for startup configuration
   try {
