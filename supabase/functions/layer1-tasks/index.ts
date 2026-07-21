@@ -170,7 +170,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
     return ok({
       session_id: session.id,
       phase: "layer1",
-      verticals: taskRows.map(publicTask),
+      verticals: taskRows.map((taskRow) => publicTask(taskRow)),
       active_verticals: config.activeVerticals,
     }, 200);
   } catch (err) {

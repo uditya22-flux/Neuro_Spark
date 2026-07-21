@@ -14,27 +14,30 @@ import {
   ValidationError,
 } from "../_shared/validate.ts";
 import {
+  compositeScore,
   evaluateAnswer,
-  normalizeModality,
+  type LayerScore,
+  modalityForExecution,
   pathLayers,
-  type PathType,
+  reEvaluatePath,
   requiredExecutions,
   scoreResponse,
   type SourceType,
   supportTransition,
+  type VerticalId,
+  VERTICALS,
 } from "../_shared/engine2.ts";
+
+const clamp = (value: number, min = 0, max = 1): number =>
+  Math.max(min, Math.min(max, value));
 
 function numberField(value: unknown, field: string, fallback = 0): number {
   if (value === undefined || value === null) return fallback;
-  const n = Number(value);
-  if (!Number.isFinite(n)) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) {
     throw new ValidationError(`${field} must be numeric.`);
   }
-  return n;
-}
-
-function average(values: number[]): number {
-  return values.length ? values.reduce((a, b) => a + b, 0) / values.length : 0;
+  return number;
 }
 
 function boundedResponse(value: unknown): unknown {
@@ -54,77 +57,162 @@ function boundedResponse(value: unknown): unknown {
   return value;
 }
 
-async function createProfile(
+const average = (values: number[]): number =>
+  values.length
+    ? values.reduce((total, value) => total + value, 0) / values.length
+    : 0;
+
+function toLayerScore(rows: Record<string, unknown>[]): LayerScore {
+  return {
+    accuracy: average(rows.map((row) => Number(row.accuracy))),
+    recovery: average(rows.map((row) => Number(row.recovery))),
+    engagement: average(rows.map((row) => Number(row.engagement))),
+    speed: average(
+      rows.map((row) => 1 - Math.min(Number(row.latency_ms), 60_000) / 60_000),
+    ),
+  };
+}
+
+async function createDeepeningProfile(
   svc: ReturnType<typeof import("../_shared/auth.ts").buildServiceClient>,
   sessionId: string,
   childId: string,
   verticalId: string,
 ): Promise<Record<string, unknown>> {
-  const { data: executions } = await svc.from("layer_task_execution").select(
-    "*",
-  ).eq("session_id", sessionId).eq("vertical_id", verticalId).order(
-    "layer_number",
-    { ascending: true },
-  );
-  const rows = executions ?? [];
+  const [
+    executionsResult,
+    stateResult,
+    handoffResult,
+    supportResult,
+    consistencyResult,
+  ] = await Promise.all([
+    svc.from("layer_task_execution").select("*").eq("session_id", sessionId).eq(
+      "vertical_id",
+      verticalId,
+    ).order("layer_number", { ascending: true }).order("execution_index", {
+      ascending: true,
+    }),
+    svc.from("layer_progression_state").select(
+      "path_type, path_history, completed_layers, support_level",
+    ).eq("session_id", sessionId).eq("vertical_id", verticalId).maybeSingle(),
+    svc.from("stage2_handoffs").select(
+      "isolation_score, accuracy, recovery, engagement, speed, telemetry_reference",
+    ).eq("session_id", sessionId).eq("vertical_id", verticalId).maybeSingle(),
+    svc.from("support_ladder_log").select(
+      "support_level, trigger_reason, outcome, created_at",
+    ).eq("session_id", sessionId).eq("vertical_id", verticalId).order(
+      "created_at",
+    ),
+    svc.from("consistency_window").select(
+      "window_index, accuracy_stability_score, fatigue_score",
+    ).eq("session_id", sessionId).eq("vertical_id", verticalId).order(
+      "window_index",
+    ),
+  ]);
+  const rows = (executionsResult.data ?? []) as Record<string, unknown>[];
   const layerScores: Record<string, unknown> = {};
   for (let layer = 2; layer <= 10; layer++) {
-    const layerRows = rows.filter((row: Record<string, unknown>) =>
-      row.layer_number === layer
-    );
-    if (layerRows.length) {
-      layerScores[`layer_${layer}`] = {
-        accuracy: average(
-          layerRows.map((r: Record<string, unknown>) => Number(r.accuracy)),
-        ),
-        recovery: average(
-          layerRows.map((r: Record<string, unknown>) => Number(r.recovery)),
-        ),
-        engagement: average(
-          layerRows.map((r: Record<string, unknown>) => Number(r.engagement)),
-        ),
-        speed: average(
-          layerRows.map((r: Record<string, unknown>) =>
-            1 - Math.min(Number(r.latency_ms), 60_000) / 60_000
-          ),
-        ),
-        metric_values: layerRows.map((r: Record<string, unknown>) =>
-          r.metric_values
-        ),
-      };
-    }
+    const layerRows = rows.filter((row) => Number(row.layer_number) === layer);
+    if (!layerRows.length) continue;
+    const score = toLayerScore(layerRows);
+    layerScores[`layer_${layer}`] = {
+      ...score,
+      composite_score: compositeScore(score),
+      executions: layerRows.length,
+      metric_values: layerRows.map((row) => row.metric_values),
+    };
   }
-  const modalityCounts = new Map<string, number>();
-  for (const row of rows) {
-    modalityCounts.set(
-      row.modality,
-      (modalityCounts.get(row.modality) ?? 0) + 1,
-    );
-  }
-  const modalityPreference =
-    [...modalityCounts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ??
-      "visual";
-  const supportLevels = rows.map((r: Record<string, unknown>) =>
-    Number(r.support_level)
-  );
+  const supportEvents = (supportResult.data ?? []) as Record<string, unknown>[];
+  const consistencyWindows = consistencyResult.data ?? [];
+  const layerSeven = rows.filter((row) => Number(row.layer_number) === 7);
   const profile = {
     vertical_id: verticalId,
-    path_type: "dynamic",
+    layer1_isolation: handoffResult.data
+      ? {
+        isolation_score: Number(handoffResult.data.isolation_score),
+        components: {
+          accuracy: Number(handoffResult.data.accuracy),
+          recovery: Number(handoffResult.data.recovery),
+          engagement: Number(handoffResult.data.engagement),
+          speed: Number(handoffResult.data.speed),
+        },
+      }
+      : null,
     layer_scores: layerScores,
-    support_ladder_summary: {
-      avg_support_level: average(supportLevels),
-      modality_preference: modalityPreference,
+    path_history: stateResult.data?.path_history ?? [],
+    final_path: stateResult.data?.path_type ?? null,
+    completed_layers: stateResult.data?.completed_layers ?? [],
+    support_ladder: {
+      final_level: Number(stateResult.data?.support_level ?? 0),
+      transitions: supportEvents,
+      average_level: average(rows.map((row) => Number(row.support_level))),
     },
+    behavioral_signals: {
+      retries: rows.map((row) => Number(row.retry_count)),
+      hint_use_count: rows.reduce(
+        (total, row) => total + Number(row.hint_usage),
+        0,
+      ),
+      answer_changes: rows.reduce(
+        (total, row) => total + Number(row.answer_changes),
+        0,
+      ),
+      skipped_count: rows.filter((row) => row.skipped === true).length,
+    },
+    transfer_score: layerSeven.length
+      ? compositeScore(toLayerScore(layerSeven))
+      : null,
+    consistency: consistencyWindows,
     telemetry_reference: `deepening:${sessionId}:${verticalId}`,
   };
-  await svc.from("deepening_profiles").upsert({
+  const record = {
     session_id: sessionId,
     child_id: childId,
     vertical_id: verticalId,
     profile,
     telemetry_reference: profile.telemetry_reference,
-  }, { onConflict: "session_id,vertical_id" });
+  };
+  const [profileWrite, handoffWrite] = await Promise.all([
+    svc.from("deepening_profiles").upsert(record, {
+      onConflict: "session_id,vertical_id",
+    }),
+    svc.from("stage3_handoffs").upsert({
+      session_id: sessionId,
+      child_id: childId,
+      vertical_id: verticalId,
+      deepening_profile: profile,
+      telemetry_reference: profile.telemetry_reference,
+    }, { onConflict: "session_id,vertical_id" }),
+  ]);
+  if (profileWrite.error || handoffWrite.error) {
+    throw new Error("Deepening profile could not be saved.");
+  }
   return profile;
+}
+
+async function saveConsistencyWindow(
+  svc: ReturnType<typeof import("../_shared/auth.ts").buildServiceClient>,
+  sessionId: string,
+  childId: string,
+  verticalId: string,
+  rows: Record<string, unknown>[],
+): Promise<void> {
+  const accuracy = rows.map((row) => Number(row.accuracy));
+  const mean = average(accuracy);
+  const variance = average(accuracy.map((value) => (value - mean) ** 2));
+  const stability = clamp(1 - Math.sqrt(variance));
+  const fatigue = clamp(
+    accuracy.length > 1 ? accuracy[0] - accuracy[accuracy.length - 1] : 0,
+  );
+  const { error } = await svc.from("consistency_window").upsert({
+    session_id: sessionId,
+    child_id: childId,
+    vertical_id: verticalId,
+    window_index: 0,
+    accuracy_stability_score: stability,
+    fatigue_score: fatigue,
+  }, { onConflict: "session_id,vertical_id,window_index" });
+  if (error) throw new Error("Consistency window could not be saved.");
 }
 
 Deno.serve(async (req: Request): Promise<Response> => {
@@ -140,6 +228,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
   } catch {
     return badRequest("Request body must be valid JSON.");
   }
+
   try {
     const childId = requireUuid(body.child_id ?? body.childId, "child_id");
     const sessionId = requireUuid(
@@ -153,63 +242,75 @@ Deno.serve(async (req: Request): Promise<Response> => {
         : requireUuid(body.response_id, "response_id");
     const verticalId = body.vertical_id ?? body.verticalId;
     if (
-      verticalId !== "calendar_genius" && verticalId !== "constellation_mapper"
-    ) throw new ValidationError("vertical_id is required.");
+      typeof verticalId !== "string" ||
+      !VERTICALS.includes(verticalId as VerticalId)
+    ) {
+      throw new ValidationError("vertical_id is required.");
+    }
     await requireOwnership(db, guardianId, childId);
     await requireActiveConsent(db, guardianId);
-    const { data: layer1Session } = await svc
-      .from("layer1_sessions")
-      .select("status, expires_at")
-      .eq("id", sessionId)
-      .eq("child_id", childId)
+    const { data: session } = await svc.from("layer1_sessions")
+      .select("status, expires_at").eq("id", sessionId).eq("child_id", childId)
       .maybeSingle();
     if (
-      !layer1Session || layer1Session.status !== "complete" ||
-      new Date(String(layer1Session.expires_at)) <= new Date()
+      !session || session.status !== "complete" ||
+      new Date(String(session.expires_at)) <= new Date()
     ) {
-      return conflict("The orchestration session is no longer active.");
+      return conflict("The deepening session is no longer active.");
     }
-    const { data: state } = await svc.from("global_progression_state").select(
+    const { data: state } = await svc.from("layer_progression_state").select(
       "*",
-    ).eq("session_id", sessionId).eq("child_id", childId).maybeSingle();
-    
-    if (!state) return conflict("Deepening progression is not initialized.");
-    
-    const { data: task } = await svc.from("vertical_task_bank").select("*").eq(
-      "id",
-      taskId,
-    ).eq("session_id", sessionId).eq("child_id", childId).eq(
-      "vertical_id",
-      verticalId,
-    ).maybeSingle();
-    if (!task) return conflict("This task is not available.");
-
+    )
+      .eq("session_id", sessionId).eq("child_id", childId).eq(
+        "vertical_id",
+        verticalId,
+      ).maybeSingle();
+    if (!state || state.status !== "in_progress") {
+      return conflict("This vertical is not active.");
+    }
+    const { data: task } = await svc.from("vertical_task_bank").select("*")
+      .eq("id", taskId).eq("session_id", sessionId).eq("child_id", childId).eq(
+        "vertical_id",
+        verticalId,
+      ).maybeSingle();
+    if (
+      !task || task.id !== state.current_task_id ||
+      Number(task.layer_number) !== Number(state.current_layer)
+    ) {
+      return conflict("This task is not active for the vertical.");
+    }
     if (responseId) {
-      const { data: existingResponse } = await svc
-        .from("layer_task_execution")
-        .select("task_id, layer_number, accuracy, support_level")
-        .eq("session_id", sessionId)
-        .eq("child_id", childId)
-        .eq("response_id", responseId)
+      const { data: replay } = await svc.from("layer_task_execution").select(
+        "task_id",
+      )
+        .eq("session_id", sessionId).eq("response_id", responseId)
         .maybeSingle();
-      if (existingResponse) {
-        if (existingResponse.task_id !== taskId) {
+      if (replay) {
+        if (replay.task_id !== taskId) {
           return conflict("response_id has already been used.");
         }
         return ok({
           session_id: sessionId,
-          layer_complete: true,
-          funnel_complete: state.status === "funnel_complete",
+          vertical_id: verticalId,
           idempotent: true,
-        }, 200);
+          funnel_complete: false,
+        });
       }
     }
-    
-    const activeTasks = (state.active_tasks as string[]) ?? [];
-    if (!activeTasks.includes(taskId)) {
-      return conflict("This task is not an active task for the current layer.");
+
+    const { data: priorRows, error: priorError } = await svc.from(
+      "layer_task_execution",
+    ).select("*")
+      .eq("session_id", sessionId).eq("task_id", taskId).order(
+        "execution_index",
+      );
+    if (priorError) throw new Error("Task attempts could not be read.");
+    const required = requiredExecutions(Number(task.layer_number));
+    const executionIndex = (priorRows?.length ?? 0) + 1;
+    if (executionIndex > required) {
+      return conflict("All required presentations for this task are complete.");
     }
-    
+
     const timing = (body.timing ?? {}) as Record<string, unknown>;
     const behavior = (body.behavior ?? {}) as Record<string, unknown>;
     const retryCount = Math.max(
@@ -229,44 +330,43 @@ Deno.serve(async (req: Request): Promise<Response> => {
     );
     const skipped = behavior.skipped === true || body.skipped === true;
     const response = body.response ?? body.user_response;
-    const storedResponse = boundedResponse(response);
-    const accuracy = evaluateAnswer(
-      task.item_payload as Record<string, unknown>,
-      response,
-    );
     const scored = scoreResponse(
-      accuracy,
+      evaluateAnswer(task.item_payload as Record<string, unknown>, response),
       numberField(timing.latency_ms ?? body.latency_ms, "latency_ms"),
       retryCount,
       hintUsage,
       skipped,
       task.source_type as SourceType,
     );
-    
-    const suppliedSupport = Math.max(
-      0,
-      Math.min(
-        5,
-        Math.floor(
-          numberField(
-            body.support_level_used ?? body.supportLevel,
-            "support_level_used",
-            0,
-          ),
-        ),
-      ),
+    const fullPayload = task.item_payload as Record<string, unknown>;
+    const publicPayload = (fullPayload.public_payload ?? {}) as Record<
+      string,
+      unknown
+    >;
+    const protocol = (publicPayload.layer_protocol ?? {}) as Record<
+      string,
+      unknown
+    >;
+    const modality = modalityForExecution(
+      Number(task.layer_number),
+      executionIndex,
     );
-    
-    const metricValues: Record<string, unknown> = {
-      objective: (task.item_payload as Record<string, unknown>).public_payload
-        ? ((task.item_payload as Record<string, unknown>)
-          .public_payload as Record<string, unknown>).objective
+    const metricValues = {
+      objective: publicPayload.objective ?? null,
+      instrumentation_only: publicPayload.instrumentation_only === true,
+      strategy_shifts: Math.max(
+        0,
+        Math.floor(numberField(behavior.strategy_shifts, "strategy_shifts")),
+      ),
+      execution_index: executionIndex,
+      required_executions: required,
+      timing_budget_ms: Array.isArray(protocol.timing_budgets_ms)
+        ? protocol.timing_budgets_ms[executionIndex - 1] ?? null
         : null,
+      modality,
     };
-    
-    const modality = normalizeModality(body.modality);
-    
-    const executionPayload: Record<string, unknown> = {
+    const storedResponse = boundedResponse(response);
+    const insertPayload: Record<string, unknown> = {
       task_id: taskId,
       session_id: sessionId,
       child_id: childId,
@@ -274,7 +374,9 @@ Deno.serve(async (req: Request): Promise<Response> => {
       layer_number: task.layer_number,
       source_type: task.source_type,
       modality,
-      support_level: suppliedSupport,
+      support_level: Number(state.support_level),
+      execution_index: executionIndex,
+      presentation_metadata: { modality, execution_index: executionIndex },
       accuracy: scored.accuracy,
       latency_ms: scored.latencyMs,
       recovery: scored.recovery,
@@ -291,53 +393,133 @@ Deno.serve(async (req: Request): Promise<Response> => {
         ? storedResponse
         : { value: storedResponse },
     };
-    if (responseId) executionPayload.response_id = responseId;
-    const { error: executionError } = await svc.from("layer_task_execution")
-      .insert(executionPayload);
-    if (executionError) {
-      return internalError("Response could not be recorded.");
+    if (responseId) insertPayload.response_id = responseId;
+    const { error: insertError } = await svc.from("layer_task_execution")
+      .insert(insertPayload);
+    if (insertError) return internalError("Response could not be recorded.");
+
+    const transition = supportTransition(Number(state.support_level), {
+      accuracy: scored.accuracy,
+      latencyMs: scored.latencyMs,
+      retryCount,
+      skipped,
+      path: state.path_type as "accelerated" | "standard" | "supported",
+    });
+    if (transition.reason && transition.outcome) {
+      const { error: supportError } = await svc.from("support_ladder_log")
+        .insert({
+          session_id: sessionId,
+          task_id: taskId,
+          child_id: childId,
+          vertical_id: verticalId,
+          support_level: transition.level,
+          trigger_reason: transition.reason,
+          outcome: transition.outcome,
+        });
+      if (supportError) {
+        throw new Error("Support ladder transition could not be saved.");
+      }
+    } else if (skipped && Number(state.support_level) === 5) {
+      await svc.from("support_ladder_log").insert({
+        session_id: sessionId,
+        task_id: taskId,
+        child_id: childId,
+        vertical_id: verticalId,
+        support_level: 5,
+        trigger_reason: "support ladder exhausted before response",
+        outcome: "abandoned",
+      });
     }
-    
-    const completedTasks = new Set((state.completed_tasks as string[]) ?? []);
-    completedTasks.add(taskId);
-    
-    const allCompleted = activeTasks.every(id => completedTasks.has(id));
-    let funnelComplete = false;
-    
-    if (allCompleted) {
-      const nextLayer = state.current_layer + 1;
-      funnelComplete = nextLayer > 10;
-      
-      const { error: progressionError } = await svc.from(
-        "global_progression_state",
+
+    const allRows = [...((priorRows ?? []) as Record<string, unknown>[]), {
+      accuracy: scored.accuracy,
+      recovery: scored.recovery,
+      engagement: scored.engagement,
+      latency_ms: scored.latencyMs,
+    }];
+    const layerComplete = allRows.length >= required;
+    let verticalComplete = false;
+    if (layerComplete) {
+      const { data: handoff } = await svc.from("stage2_handoffs")
+        .select("isolation_score, recovery").eq("session_id", sessionId).eq(
+          "vertical_id",
+          verticalId,
+        ).maybeSingle();
+      if (!handoff) throw new Error("Layer 1 handoff could not be read.");
+      if (Number(task.layer_number) === 9) {
+        await saveConsistencyWindow(
+          svc,
+          sessionId,
+          childId,
+          verticalId,
+          allRows,
+        );
+      }
+      const latestScore = toLayerScore(allRows);
+      const reroute = reEvaluatePath({
+        isolationScore: Number(handoff.isolation_score),
+        recovery: Number(handoff.recovery),
+      }, latestScore);
+      const completed = new Set<number>(
+        Array.isArray(state.completed_layers)
+          ? state.completed_layers.map((value: unknown) => Number(value))
+          : [],
+      );
+      completed.add(Number(task.layer_number));
+      const nextLayers = pathLayers(reroute.path);
+      const nextLayer = nextLayers.find((layer) =>
+        layer > Number(task.layer_number) && !completed.has(layer)
+      );
+      const history = Array.isArray(state.path_history)
+        ? state.path_history
+        : [];
+      history.push({
+        layer: Number(task.layer_number),
+        path: reroute.path,
+        previous_path: state.path_type,
+        routing_signal: reroute.routingSignal,
+        reason: reroute.reason,
+        created_at: new Date().toISOString(),
+      });
+      verticalComplete = nextLayer === undefined;
+      const { error: stateWriteError } = await svc.from(
+        "layer_progression_state",
       ).update({
-        current_layer: funnelComplete ? state.current_layer : nextLayer,
-        status: funnelComplete ? "funnel_complete" : "in_progress",
-        active_tasks: [],
-        completed_tasks: [],
-        orchestration_plan: {},
+        current_layer: verticalComplete ? Number(task.layer_number) : nextLayer,
+        path_type: reroute.path,
+        path_layers: nextLayers,
+        path_history: history,
+        completed_layers: [...completed].sort((a, b) => a - b),
+        support_level: transition.level,
+        current_task_id: null,
+        status: verticalComplete ? "funnel_complete" : "in_progress",
         updated_at: new Date().toISOString(),
       }).eq("id", state.id);
-      
-      if (progressionError) {
-        return internalError("Global deepening progression could not be updated.");
+      if (stateWriteError) {
+        throw new Error("Deepening progression could not be updated.");
       }
-      
-      if (funnelComplete) {
-         // Create profiles for all involved verticals
-         const { data: verticals } = await svc.from("layer_task_execution").select("vertical_id").eq("session_id", sessionId);
-         const distinctVerticals = [...new Set((verticals ?? []).map(v => v.vertical_id))];
-         for (const v of distinctVerticals) {
-           await createProfile(svc, sessionId, childId, String(v));
-         }
+      if (verticalComplete) {
+        await createDeepeningProfile(svc, sessionId, childId, verticalId);
       }
     } else {
-      await svc.from("global_progression_state").update({
-        completed_tasks: Array.from(completedTasks),
+      const { error: stateWriteError } = await svc.from(
+        "layer_progression_state",
+      ).update({
+        support_level: transition.level,
         updated_at: new Date().toISOString(),
       }).eq("id", state.id);
+      if (stateWriteError) {
+        throw new Error("Support state could not be updated.");
+      }
     }
-    
+
+    const { count: remaining } = await svc.from("layer_progression_state")
+      .select("id", { count: "exact", head: true })
+      .eq("session_id", sessionId).eq("child_id", childId).eq(
+        "status",
+        "in_progress",
+      );
+    const funnelComplete = (remaining ?? 0) === 0;
     await writeAudit({
       action: "engine2.deepening_response_recorded",
       guardianId,
@@ -346,19 +528,25 @@ Deno.serve(async (req: Request): Promise<Response> => {
         session_id: sessionId,
         vertical_id: verticalId,
         layer: task.layer_number,
-        layer_complete: allCompleted,
+        execution_index: executionIndex,
+        layer_complete: layerComplete,
       },
     });
-    
     return ok({
       session_id: sessionId,
+      vertical_id: verticalId,
+      layer_complete: layerComplete,
+      vertical_complete: verticalComplete,
       funnel_complete: funnelComplete,
+      support_level: transition.level,
+      required_executions: required,
+      execution_index: executionIndex,
     }, 201);
-  } catch (err) {
-    if (err instanceof ValidationError) return badRequest(err.message);
+  } catch (error) {
+    if (error instanceof ValidationError) return badRequest(error.message);
     console.error(
       "[deepening-submit-response] unexpected:",
-      (err as Error).message,
+      (error as Error).message,
     );
     return internalError();
   }

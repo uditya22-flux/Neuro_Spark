@@ -1,10 +1,29 @@
 import { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-export const VERTICALS = ["calendar_genius", "constellation_mapper", "discovery"] as const;
+// These are exploration domains, not diagnostic labels.  Engine 1 may enable
+// any subset, and Engine 2 must keep the domains independent all the way
+// through the deepening funnel.
+export const VERTICALS = [
+  "calendar_genius",
+  "constellation_mapper",
+  "discovery",
+  "visual_pattern_explorer",
+  "sequence_navigator",
+  "spatial_builder",
+  "memory_weaver",
+  "language_patterner",
+  "number_navigator",
+  "logic_lens",
+] as const;
 export type VerticalId = typeof VERTICALS[number];
 export type SourceType = "curated" | "predicted" | "created";
 export type PathType = "accelerated" | "standard" | "supported";
 export type Modality = "visual" | "audio" | "animated" | "interactive";
+export type SupportOutcome =
+  | "resolved"
+  | "escalated_further"
+  | "de_escalated"
+  | "abandoned";
 
 export interface Engine1Config {
   sensory: Record<string, unknown>;
@@ -22,6 +41,11 @@ export interface TaskCandidate {
   payload: Record<string, unknown>;
   answerKey: Record<string, unknown>;
   ruleVersion: string;
+  composition?: {
+    curatedBaselineId: string;
+    predictedVariantId: string;
+    createdInstanceId: string;
+  };
 }
 
 export interface ScoredResponse {
@@ -31,6 +55,22 @@ export interface ScoredResponse {
   engagement: number;
   speed: number;
   isolationScore: number;
+}
+
+export interface LayerScore {
+  accuracy: number;
+  recovery: number;
+  engagement: number;
+  speed: number;
+}
+
+export interface LayerProtocol {
+  requiredExecutions: number;
+  modalities: Modality[];
+  timingBudgetsMs: number[];
+  instrumentationOnly: boolean;
+  structureId: string;
+  surfaceDomain: string | null;
 }
 
 const SOURCE_CONFIDENCE: Record<SourceType, number> = {
@@ -106,9 +146,129 @@ export function pathLayers(path: PathType): number[] {
 }
 
 export function requiredExecutions(layer: number): number {
-  if (layer === 4) return 4;
+  if (layer === 4 || layer === 5) return 4;
   if (layer === 9) return 3;
   return 1;
+}
+
+export function modalityForExecution(
+  layer: number,
+  executionIndex: number,
+): Modality {
+  if (layer !== 5) return "visual";
+  return (["visual", "audio", "animated", "interactive"] as const)[
+    Math.max(0, Math.min(3, executionIndex - 1))
+  ];
+}
+
+export function layerProtocol(
+  verticalId: VerticalId,
+  layer: number,
+): LayerProtocol {
+  const required = requiredExecutions(layer);
+  const timingBudgetsMs = layer === 4 ? [60_000, 45_000, 30_000, 15_000] : [];
+  const modalities: Modality[] = layer === 5
+    ? ["visual", "audio", "animated", "interactive"]
+    : ["visual"];
+  const transferSurfaces: Partial<Record<VerticalId, string>> = {
+    calendar_genius: "route-planning",
+    constellation_mapper: "garden-map",
+    discovery: "treasure-map",
+    visual_pattern_explorer: "tile-workshop",
+    sequence_navigator: "train-schedule",
+    spatial_builder: "playground-map",
+    memory_weaver: "story-shelf",
+    language_patterner: "message-workshop",
+    number_navigator: "market-route",
+    logic_lens: "mystery-club",
+  };
+  return {
+    requiredExecutions: required,
+    modalities,
+    timingBudgetsMs,
+    instrumentationOnly: layer === 8,
+    // Layer 3 must always use a structure that did not appear in the two
+    // preceding layers for this vertical. The layer-qualified family makes
+    // that invariant explicit and auditable in the stored task payload.
+    structureId: layer === 3
+      ? `${verticalId}:novel-structure:v1`
+      : `${verticalId}:core-structure:v${layer}`,
+    surfaceDomain: layer === 7
+      ? transferSurfaces[verticalId] ?? "new-surface"
+      : null,
+  };
+}
+
+export function supportGuidance(level: number): Record<string, unknown> {
+  const bounded = Math.max(0, Math.min(5, Math.floor(level)));
+  const guidance = [
+    { mode: "independent", message: null, simplify_choices: false },
+    {
+      mode: "gentle_prompt",
+      message: "Take your time and try one small step.",
+      simplify_choices: false,
+    },
+    {
+      mode: "cue",
+      message: "Look for one part that repeats or stands out.",
+      simplify_choices: false,
+    },
+    {
+      mode: "step_by_step",
+      message: "Start with the first part, then choose what comes next.",
+      simplify_choices: false,
+    },
+    {
+      mode: "simplified_choices",
+      message: "Here are fewer choices to explore first.",
+      simplify_choices: true,
+    },
+    {
+      mode: "interactive_help",
+      message: "Let’s work through the first step together.",
+      simplify_choices: true,
+    },
+  ];
+  return { level: bounded, ...guidance[bounded] };
+}
+
+export function compositeScore(score: LayerScore): number {
+  return clamp(
+    (0.4 * clamp(score.accuracy)) +
+      (0.3 * clamp(score.recovery)) +
+      (0.2 * clamp(score.engagement)) +
+      (0.1 * clamp(score.speed)),
+  );
+}
+
+/**
+ * Layer 1 remains the authoritative isolation signal. Later layers only add
+ * fresh context for routing; they never overwrite or re-run that score.
+ */
+export function reEvaluatePath(
+  layer1: { isolationScore: number; recovery: number },
+  latest: LayerScore,
+): { path: PathType; routingSignal: number; reason: string } {
+  if (latest.recovery < 0.45) {
+    return {
+      path: "supported",
+      routingSignal: compositeScore(latest),
+      reason: "recovery component needs additional support",
+    };
+  }
+  const routingSignal = clamp(
+    (layer1.isolationScore + compositeScore(latest)) / 2,
+  );
+  const path = pathForIsolation(
+    routingSignal,
+    Math.min(layer1.recovery, latest.recovery),
+  );
+  return {
+    path,
+    routingSignal,
+    reason:
+      `Layer 1 isolation retained; latest layer signal selected ${path} route`,
+  };
 }
 
 export function normalizeModality(value: unknown): Modality {
@@ -142,15 +302,21 @@ export function scoreResponse(
     ? 0.1
     : clamp(0.55 + (normalizedAccuracy * 0.25) + (hintUsage > 0 ? 0.05 : 0.15));
   const speed = clamp(1 - safeLatency / 60_000);
-  const base = (0.4 * normalizedAccuracy) + (0.3 * recovery) +
-    (0.2 * engagement) + (0.1 * speed);
+  const base = compositeScore({
+    accuracy: normalizedAccuracy,
+    recovery,
+    engagement,
+    speed,
+  });
   return {
     accuracy: normalizedAccuracy,
     latencyMs: safeLatency,
     recovery,
     engagement,
     speed,
-    isolationScore: clamp(base * confidenceFor(source)),
+    // Source provenance is retained separately. It must not change the fixed
+    // isolation formula, otherwise scores are not comparable across verticals.
+    isolationScore: base,
   };
 }
 
@@ -164,6 +330,18 @@ export function evaluateAnswer(
         answerKey.expected.toLowerCase()
       ? 1
       : 0;
+  }
+  if (typeof answerKey.expected === "number") {
+    return Number(response) === answerKey.expected ? 1 : 0;
+  }
+  if (
+    typeof answerKey.expectedIndex === "number" ||
+    typeof answerKey.odd_shape_index === "number"
+  ) {
+    const expected = Number(
+      answerKey.expectedIndex ?? answerKey.odd_shape_index,
+    );
+    return Number(response) === expected ? 1 : 0;
   }
   if (typeof answerKey.requiredCount === "number") {
     const selected = parseSelectedStarIds(response);
@@ -214,20 +392,35 @@ export function supportTransition(
     skipped: boolean;
     path: PathType;
   },
-): { level: number; reason: string | null } {
+): { level: number; reason: string | null; outcome: SupportOutcome | null } {
   const highFriction = input.skipped ||
     (input.latencyMs >= 45_000 && input.retryCount >= 2);
   const miss = input.accuracy < 0.5;
   if (current < 5 && (highFriction || miss)) {
     if (current === 0 && input.path === "supported" && miss) {
-      return { level: 2, reason: "first miss on supported path" };
+      return {
+        level: 2,
+        reason: "first miss on supported path",
+        outcome: "escalated_further",
+      };
     }
     return {
       level: current + 1,
       reason: highFriction ? "long idle or repeated retry" : "failed attempt",
+      outcome: "escalated_further",
     };
   }
-  return { level: current, reason: null };
+  if (
+    current > 0 && input.accuracy >= 0.85 && input.retryCount === 0 &&
+    !input.skipped && input.latencyMs < 20_000
+  ) {
+    return {
+      level: current - 1,
+      reason: "sustained independent response",
+      outcome: "de_escalated",
+    };
+  }
+  return { level: current, reason: null, outcome: null };
 }
 
 export async function chooseVariant(
@@ -239,6 +432,10 @@ export async function chooseVariant(
       difficulty: TaskCandidate["difficultyTier"];
       modality: Modality;
     }
+  >,
+  config?: Pick<
+    Engine1Config,
+    "sensory" | "layoutComplexityTier" | "hyperFocusTheme"
   >,
 ): Promise<
   {
@@ -281,6 +478,10 @@ export async function chooseVariant(
               vertical_id: verticalId,
               layer,
               allowed_variants: allowed,
+              sensory_preferences: config?.sensory ?? {},
+              layout_complexity_tier: config?.layoutComplexityTier ??
+                "standard",
+              theme: config?.hyperFocusTheme ?? "general",
             }),
           },
         ],
@@ -458,23 +659,43 @@ export function layerObjective(layer: number): string {
 export async function orchestrateLayer(
   layer: number,
   activeVerticals: VerticalId[],
-  previousScores: Record<string, { accuracy: number; speed: number; isolationScore: number }>,
-): Promise<Record<string, { difficulty: "baseline" | "progressive" | "advanced", modality: Modality }>> {
+  previousScores: Record<
+    string,
+    { accuracy: number; speed: number; isolationScore: number }
+  >,
+): Promise<
+  Record<
+    string,
+    { difficulty: "baseline" | "progressive" | "advanced"; modality: Modality }
+  >
+> {
   const provider = Deno.env.get("TASK_LLM_PROVIDER") ?? "deterministic";
   const apiKey = Deno.env.get("OPENAI_API_KEY");
   if (provider !== "openai" || !apiKey) {
     if (Deno.env.get("TASK_LLM_REQUIRED") === "true") {
       throw new Error("Approved task LLM is not configured.");
     }
-    const plan: Record<string, { difficulty: "baseline" | "progressive" | "advanced", modality: Modality }> = {};
+    const plan: Record<
+      string,
+      {
+        difficulty: "baseline" | "progressive" | "advanced";
+        modality: Modality;
+      }
+    > = {};
     for (const v of activeVerticals) {
-      plan[v] = { difficulty: layer >= 7 ? "advanced" : (layer >= 2 ? "progressive" : "baseline"), modality: "visual" };
+      plan[v] = {
+        difficulty: layer >= 7
+          ? "advanced"
+          : (layer >= 2 ? "progressive" : "baseline"),
+        modality: "visual",
+      };
     }
     return plan;
   }
 
   const response = await fetch(
-    Deno.env.get("OPENAI_BASE_URL") ?? "https://api.openai.com/v1/chat/completions",
+    Deno.env.get("OPENAI_BASE_URL") ??
+      "https://api.openai.com/v1/chat/completions",
     {
       method: "POST",
       headers: {
@@ -512,9 +733,20 @@ export async function orchestrateLayer(
     const parsed = JSON.parse(raw);
     return parsed.plan ?? {};
   } catch {
-    const plan: Record<string, { difficulty: "baseline" | "progressive" | "advanced", modality: Modality }> = {};
+    const plan: Record<
+      string,
+      {
+        difficulty: "baseline" | "progressive" | "advanced";
+        modality: Modality;
+      }
+    > = {};
     for (const v of activeVerticals) {
-      plan[v] = { difficulty: layer >= 7 ? "advanced" : (layer >= 2 ? "progressive" : "baseline"), modality: "visual" };
+      plan[v] = {
+        difficulty: layer >= 7
+          ? "advanced"
+          : (layer >= 2 ? "progressive" : "baseline"),
+        modality: "visual",
+      };
     }
     return plan;
   }
@@ -526,34 +758,73 @@ export async function orchestrateLayer(
 // patterns, sequences, spatial logic, memory) so the engine can surface the
 // child's strengths without presupposing the output vertical.
 
-const SHAPES = ["circle", "square", "triangle", "star", "hexagon", "diamond", "rectangle", "oval"] as const;
-const COLOURS = ["red", "blue", "green", "yellow", "orange", "purple", "pink", "brown"] as const;
+const SHAPES = [
+  "circle",
+  "square",
+  "triangle",
+  "star",
+  "hexagon",
+  "diamond",
+  "rectangle",
+  "oval",
+] as const;
+const COLOURS = [
+  "red",
+  "blue",
+  "green",
+  "yellow",
+  "orange",
+  "purple",
+  "pink",
+  "brown",
+] as const;
 
-type DiscoveryDomain = "shape_sort" | "colour_pattern" | "number_sequence" | "spatial_mirror" | "memory_match";
+type DiscoveryDomain =
+  | "shape_sort"
+  | "colour_pattern"
+  | "number_sequence"
+  | "spatial_mirror"
+  | "memory_match";
 
 // How many question domains are unlocked per layer (more domains = harder)
 function discoveryDomainsForLayer(layer: number): DiscoveryDomain[] {
-  const all: DiscoveryDomain[] = ["shape_sort", "colour_pattern", "number_sequence", "spatial_mirror", "memory_match"];
+  const all: DiscoveryDomain[] = [
+    "shape_sort",
+    "colour_pattern",
+    "number_sequence",
+    "spatial_mirror",
+    "memory_match",
+  ];
   // Layer 1-2: simple shape/colour; layers 3-5 add sequences; layers 6+ add spatial/memory
   if (layer <= 2) return ["shape_sort", "colour_pattern"];
   if (layer <= 5) return ["shape_sort", "colour_pattern", "number_sequence"];
   return all;
 }
 
-function discoveryDifficulty(layer: number): "baseline" | "progressive" | "advanced" {
+function discoveryDifficulty(
+  layer: number,
+): "baseline" | "progressive" | "advanced" {
   if (layer >= 7) return "advanced";
   if (layer >= 2) return "progressive";
   return "baseline";
 }
 
-function buildShapeSort(layer: number, seed: string): { payload: Record<string, unknown>; answerKey: Record<string, unknown> } {
+function buildShapeSort(
+  layer: number,
+  seed: string,
+): { payload: Record<string, unknown>; answerKey: Record<string, unknown> } {
   const shapeCount = 3 + Math.min(layer, 5); // 4 to 8 shapes
   const targetIdx = seededNumber(`${seed}:tgt`, shapeCount);
-  const shapes = Array.from({ length: shapeCount }, (_, i) =>
-    SHAPES[(seededNumber(`${seed}:s${i}`, SHAPES.length))]);
+  const shapes = Array.from(
+    { length: shapeCount },
+    (_, i) => SHAPES[seededNumber(`${seed}:s${i}`, SHAPES.length)],
+  );
   const target = shapes[targetIdx];
   // The odd-one-out: replace target with a different shape
-  const oddShape = SHAPES[(SHAPES.indexOf(target as typeof SHAPES[number]) + 1 + seededNumber(`${seed}:odd`, SHAPES.length - 1)) % SHAPES.length];
+  const oddShape = SHAPES[
+    (SHAPES.indexOf(target as typeof SHAPES[number]) + 1 +
+      seededNumber(`${seed}:odd`, SHAPES.length - 1)) % SHAPES.length
+  ];
   const options = [...shapes];
   options[targetIdx] = oddShape;
   return {
@@ -567,10 +838,15 @@ function buildShapeSort(layer: number, seed: string): { payload: Record<string, 
   };
 }
 
-function buildColourPattern(layer: number, seed: string): { payload: Record<string, unknown>; answerKey: Record<string, unknown> } {
+function buildColourPattern(
+  layer: number,
+  seed: string,
+): { payload: Record<string, unknown>; answerKey: Record<string, unknown> } {
   const patternLen = 3 + Math.min(layer - 1, 4); // 3 to 7 colours in sequence
-  const sequence = Array.from({ length: patternLen }, (_, i) =>
-    COLOURS[seededNumber(`${seed}:c${i}`, COLOURS.length)]);
+  const sequence = Array.from(
+    { length: patternLen },
+    (_, i) => COLOURS[seededNumber(`${seed}:c${i}`, COLOURS.length)],
+  );
   const nextColour = COLOURS[seededNumber(`${seed}:next`, COLOURS.length)];
   return {
     payload: {
@@ -583,7 +859,10 @@ function buildColourPattern(layer: number, seed: string): { payload: Record<stri
   };
 }
 
-function buildNumberSequence(layer: number, seed: string): { payload: Record<string, unknown>; answerKey: Record<string, unknown> } {
+function buildNumberSequence(
+  layer: number,
+  seed: string,
+): { payload: Record<string, unknown>; answerKey: Record<string, unknown> } {
   const step = 1 + seededNumber(`${seed}:step`, layer + 1); // step size grows with layer
   const start = 1 + seededNumber(`${seed}:start`, 10);
   const length = 4 + Math.min(layer, 3);
@@ -599,9 +878,15 @@ function buildNumberSequence(layer: number, seed: string): { payload: Record<str
   };
 }
 
-function buildSpatialMirror(layer: number, seed: string): { payload: Record<string, unknown>; answerKey: Record<string, unknown> } {
+function buildSpatialMirror(
+  layer: number,
+  seed: string,
+): { payload: Record<string, unknown>; answerKey: Record<string, unknown> } {
   const gridSize = 3 + Math.floor(layer / 4); // 3x3 to 5x5
-  const cells = Array.from({ length: gridSize * gridSize }, (_, i) => seededNumber(`${seed}:cell${i}`, 2));
+  const cells = Array.from(
+    { length: gridSize * gridSize },
+    (_, i) => seededNumber(`${seed}:cell${i}`, 2),
+  );
   // The "mirror" answer is the horizontal flip of the row at position seededNumber
   const targetRow = seededNumber(`${seed}:row`, gridSize);
   const row = cells.slice(targetRow * gridSize, (targetRow + 1) * gridSize);
@@ -618,13 +903,19 @@ function buildSpatialMirror(layer: number, seed: string): { payload: Record<stri
   };
 }
 
-function buildMemoryMatch(layer: number, seed: string): { payload: Record<string, unknown>; answerKey: Record<string, unknown> } {
+function buildMemoryMatch(
+  layer: number,
+  seed: string,
+): { payload: Record<string, unknown>; answerKey: Record<string, unknown> } {
   const pairCount = 2 + Math.min(layer, 4); // 2 to 6 pairs
-  const allShapes = Array.from({ length: pairCount }, (_, i) =>
-    SHAPES[seededNumber(`${seed}:m${i}`, SHAPES.length)]);
+  const allShapes = Array.from(
+    { length: pairCount },
+    (_, i) => SHAPES[seededNumber(`${seed}:m${i}`, SHAPES.length)],
+  );
   // Shuffle by seeding
   const shuffled = [...allShapes, ...allShapes].sort((a, b) =>
-    seededNumber(`${seed}:sort${a}${b}`, 100) - 50);
+    seededNumber(`${seed}:sort${a}${b}`, 100) - 50
+  );
   return {
     payload: {
       kind: "memory-match",
@@ -648,9 +939,14 @@ function discoveryTask(
     ? `${seed}:acc${Math.round(previousScore.accuracy * 10)}`
     : seed;
   const availableDomains = discoveryDomainsForLayer(layer);
-  const domain = availableDomains[seededNumber(`${adaptSeed}:domain`, availableDomains.length)];
+  const domain = availableDomains[
+    seededNumber(`${adaptSeed}:domain`, availableDomains.length)
+  ];
 
-  let content: { payload: Record<string, unknown>; answerKey: Record<string, unknown> };
+  let content: {
+    payload: Record<string, unknown>;
+    answerKey: Record<string, unknown>;
+  };
   switch (domain) {
     case "colour_pattern":
       content = buildColourPattern(layer, adaptSeed);
@@ -688,6 +984,125 @@ function discoveryTask(
   };
 }
 
+const CURATED_BASELINES: Record<VerticalId, { id: string; family: string }> = {
+  calendar_genius: { id: "calendar-baseline-v1", family: "calendar-order" },
+  constellation_mapper: {
+    id: "constellation-baseline-v1",
+    family: "constellation-anomaly",
+  },
+  discovery: { id: "discovery-baseline-v1", family: "broad-pattern" },
+  visual_pattern_explorer: {
+    id: "visual-pattern-baseline-v1",
+    family: "visual-pattern",
+  },
+  sequence_navigator: {
+    id: "sequence-baseline-v1",
+    family: "ordered-sequence",
+  },
+  spatial_builder: { id: "spatial-baseline-v1", family: "spatial-relation" },
+  memory_weaver: { id: "memory-baseline-v1", family: "memory-recall" },
+  language_patterner: {
+    id: "language-baseline-v1",
+    family: "language-pattern",
+  },
+  number_navigator: { id: "number-baseline-v1", family: "number-pattern" },
+  logic_lens: { id: "logic-baseline-v1", family: "logic-relation" },
+};
+
+const GENERIC_VERTICAL_PROMPTS: Partial<Record<VerticalId, string>> = {
+  visual_pattern_explorer: "Which symbol completes this visual pattern?",
+  sequence_navigator: "Which step comes next in this sequence?",
+  spatial_builder: "Which map marker matches the shown relation?",
+  memory_weaver: "Which item belongs with the pattern you just explored?",
+  language_patterner: "Which word follows the same pattern?",
+  number_navigator: "Which number completes the route?",
+  logic_lens: "Which choice follows the rule?",
+};
+
+function genericVerticalTask(
+  verticalId: Exclude<
+    VerticalId,
+    "calendar_genius" | "constellation_mapper" | "discovery"
+  >,
+  layer: number,
+  seed: string,
+  theme: string,
+  modality: Modality,
+): TaskCandidate {
+  const options = ["A", "B", "C", "D"];
+  const expected = options[seededNumber(`${seed}:expected`, options.length)];
+  const prompt = GENERIC_VERTICAL_PROMPTS[verticalId] ??
+    "Which choice completes the pattern?";
+  return {
+    verticalId,
+    layer,
+    sourceType: layer === 1 ? "curated" : "created",
+    difficultyTier: layer >= 7
+      ? "advanced"
+      : layer >= 2
+      ? "progressive"
+      : "baseline",
+    modality,
+    payload: {
+      kind: "choice-pattern",
+      prompt,
+      options,
+      theme_skin: theme,
+      modality,
+      objective: layerObjective(layer),
+    },
+    answerKey: { expected },
+    ruleVersion: `${verticalId}-v1-layer-${layer}`,
+  };
+}
+
+function applyLayerProtocol(
+  task: TaskCandidate,
+  protocol: LayerProtocol,
+  seed: string,
+): TaskCandidate {
+  const payload = { ...task.payload } as Record<string, unknown>;
+  payload.structure_id = protocol.structureId;
+  payload.layer_protocol = {
+    required_executions: protocol.requiredExecutions,
+    modalities: protocol.modalities,
+    timing_budgets_ms: protocol.timingBudgetsMs,
+    instrumentation_only: protocol.instrumentationOnly,
+    surface_domain: protocol.surfaceDomain,
+  };
+  if (task.layer === 3) payload.novel_structure = true;
+  if (task.layer === 4) payload.timing_budgets_ms = protocol.timingBudgetsMs;
+  if (task.layer === 5) payload.presentation_modalities = protocol.modalities;
+  if (task.layer === 6) {
+    payload.distractor_density = 0.5;
+    payload.distractor_set_id = `${task.verticalId}:layer6:${
+      seededNumber(seed, 10_000)
+    }`;
+  }
+  if (task.layer === 7) {
+    payload.transfer_surface = protocol.surfaceDomain;
+    payload.prompt = `${
+      String(payload.prompt)
+    } Imagine the same rule in a ${protocol.surfaceDomain} adventure.`;
+  }
+  if (task.layer === 8) payload.instrumentation_only = true;
+  if (task.layer === 9) {
+    payload.held_difficulty = true;
+    payload.consistency_window = 3;
+  }
+  if (task.layer === 10) {
+    payload.applied_scenario = {
+      context: protocol.surfaceDomain ?? "everyday planning",
+      goal: "Use the same pattern in a practical story scenario.",
+    };
+    payload.prompt = `${
+      String(payload.prompt)
+    } Use it to help with this everyday story.`;
+  }
+  task.payload = payload;
+  return task;
+}
+
 export async function createTask(
   verticalId: VerticalId,
   layer: number,
@@ -713,17 +1128,50 @@ export async function createTask(
       modality,
     },
   ];
-  let choice = await chooseVariant(verticalId, layer, allowed);
+  let choice = await chooseVariant(verticalId, layer, allowed, config);
   if (forcedDifficulty) {
     choice = { ...choice, difficulty: forcedDifficulty };
   }
   const theme = config.hyperFocusTheme ||
     (choice.id === "calm-visual" ? "calm" : "general");
   const task = verticalId === "discovery"
-    ? discoveryTask(layer, seed, theme, normalizeModality(choice.modality), previousScore)
+    ? discoveryTask(
+      layer,
+      seed,
+      theme,
+      normalizeModality(choice.modality),
+      previousScore,
+    )
     : verticalId === "calendar_genius"
     ? calendarTask(layer, seed, theme, normalizeModality(choice.modality))
-    : constellationTask(layer, seed, theme, normalizeModality(choice.modality));
+    : verticalId === "constellation_mapper"
+    ? constellationTask(layer, seed, theme, normalizeModality(choice.modality))
+    : genericVerticalTask(
+      verticalId,
+      layer,
+      seed,
+      theme,
+      normalizeModality(choice.modality),
+    );
+  const baseline = CURATED_BASELINES[verticalId];
+  const protocol = layerProtocol(verticalId, layer);
+  task.composition = {
+    curatedBaselineId: baseline.id,
+    predictedVariantId: choice.id,
+    createdInstanceId: `${verticalId}:${layer}:${
+      seededNumber(`${seed}:instance`, 1_000_000)
+    }`,
+  };
+  task.payload = {
+    ...task.payload,
+    content_composition: {
+      curated_baseline_id: task.composition.curatedBaselineId,
+      curated_family: baseline.family,
+      predicted_variant_id: task.composition.predictedVariantId,
+      created_instance_id: task.composition.createdInstanceId,
+    },
+  };
+  applyLayerProtocol(task, protocol, seed);
   task.sourceType = layer === 1
     ? "curated"
     : choice.id === "calm-visual"
@@ -736,6 +1184,11 @@ export async function createTask(
 
 export function publicTask(
   taskRow: Record<string, unknown>,
+  options: {
+    supportLevel?: number;
+    executionIndex?: number;
+    requiredExecutions?: number;
+  } = {},
 ): Record<string, unknown> {
   const full = (taskRow.item_payload ?? {}) as Record<string, unknown>;
   const payload = {
@@ -748,6 +1201,58 @@ export function publicTask(
   delete payload.correct_day;
   delete payload.answer_key;
   delete payload.expected;
+  const protocol = (payload.layer_protocol ?? {}) as Record<string, unknown>;
+  const executionIndex = Math.max(1, Number(options.executionIndex ?? 1));
+  const required = Math.max(
+    1,
+    Number(options.requiredExecutions ?? protocol.required_executions ?? 1),
+  );
+  const timingBudgets = Array.isArray(protocol.timing_budgets_ms)
+    ? protocol.timing_budgets_ms
+    : [];
+  const modalities = Array.isArray(protocol.modalities)
+    ? protocol.modalities
+    : [];
+  const modality = modalities[executionIndex - 1] ?? payload.modality ??
+    "visual";
+  const supportLevel = Math.max(
+    0,
+    Math.min(5, Number(options.supportLevel ?? 0)),
+  );
+  payload.support = supportGuidance(supportLevel);
+  if (supportLevel >= 4 && Array.isArray(payload.options) && answerKey) {
+    const expected = answerKey.expected;
+    if (typeof expected === "string" && payload.options.includes(expected)) {
+      payload.options = [
+        expected,
+        ...payload.options.filter((option) => option !== expected).slice(0, 1),
+      ];
+    }
+  }
+  if (supportLevel >= 4 && payload.kind === "calendar-order" && answerKey) {
+    const expected = answerKey.expected;
+    if (typeof expected === "string") {
+      const days = [
+        "Monday",
+        "Tuesday",
+        "Wednesday",
+        "Thursday",
+        "Friday",
+        "Saturday",
+        "Sunday",
+      ];
+      payload.visible_options = [
+        expected,
+        ...days.filter((day) => day !== expected).slice(0, 1),
+      ];
+    }
+  }
+  payload.execution_index = executionIndex;
+  payload.required_executions = required;
+  if (timingBudgets.length) {
+    payload.timing_budget_ms = timingBudgets[executionIndex - 1] ?? null;
+  }
+  payload.modality = modality;
   // Keep the existing Flutter widgets compatible while the server remains the
   // scoring authority. The answer is not used to calculate server scores.
   return {
@@ -761,7 +1266,10 @@ export function publicTask(
     prompt: payload.prompt ?? "Explore the pattern below.",
     task_data: payload,
     answer_key_present: !!answerKey,
-    modality: payload.modality ?? "visual",
+    modality,
+    support_level: supportLevel,
+    timing_variant: executionIndex,
+    required_executions: required,
     objective: payload.objective ??
       layerObjective(Number(taskRow.layer_number)),
   };

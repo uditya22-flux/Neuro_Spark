@@ -82,6 +82,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
       supportLadder: [],
       consistencyWindows: [],
       deepeningProfiles: [],
+      stage3Handoffs: [],
     };
 
     if (resolvedChildIds.length > 0) {
@@ -97,6 +98,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
         supportRes,
         consistencyRes,
         profileRes,
+        stage3HandoffRes,
       ] = await Promise.all([
         db.from("sessions").select(
           "id, child_id, expires_at, revoked_at, created_at",
@@ -118,10 +120,10 @@ Deno.serve(async (req: Request): Promise<Response> => {
           "id, response_id, session_id, child_id, task_id, vertical_id, source_type, accuracy, latency_ms, recovery, engagement, speed, source_confidence, isolation_score, telemetry_reference, expires_at, created_at",
         ).in("child_id", resolvedChildIds),
         db.from("layer_progression_state").select(
-          "id, session_id, child_id, vertical_id, current_layer, path_type, path_layers, completed_layers, status, support_level, updated_at",
+          "id, session_id, child_id, vertical_id, current_layer, path_type, path_layers, path_history, completed_layers, status, support_level, updated_at",
         ).in("child_id", resolvedChildIds),
         db.from("layer_task_execution").select(
-          "id, response_id, task_id, session_id, child_id, vertical_id, layer_number, source_type, modality, support_level, accuracy, latency_ms, recovery, engagement, retry_count, hint_usage, answer_changes, skipped, metric_values, expires_at, created_at",
+          "id, response_id, task_id, session_id, child_id, vertical_id, layer_number, source_type, modality, support_level, execution_index, presentation_metadata, accuracy, latency_ms, recovery, engagement, retry_count, hint_usage, answer_changes, skipped, metric_values, expires_at, created_at",
         ).in("child_id", resolvedChildIds),
         db.from("support_ladder_log").select(
           "id, session_id, task_id, child_id, vertical_id, support_level, trigger_reason, outcome, created_at",
@@ -131,6 +133,9 @@ Deno.serve(async (req: Request): Promise<Response> => {
         ).in("child_id", resolvedChildIds),
         db.from("deepening_profiles").select(
           "id, session_id, child_id, vertical_id, profile, telemetry_reference, created_at",
+        ).in("child_id", resolvedChildIds),
+        db.from("stage3_handoffs").select(
+          "id, session_id, child_id, vertical_id, deepening_profile, telemetry_reference, created_at",
         ).in("child_id", resolvedChildIds),
       ]);
       sessions = sessRes.data ?? [];
@@ -145,6 +150,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
         supportLadder: supportRes.data ?? [],
         consistencyWindows: consistencyRes.data ?? [],
         deepeningProfiles: profileRes.data ?? [],
+        stage3Handoffs: stage3HandoffRes.data ?? [],
       };
     }
 

@@ -183,6 +183,28 @@ class DeepeningController extends StateNotifier<DeepeningState> {
       supportLadderLevel: (state.supportLadderLevel + 1).clamp(0, 5).toInt(),
       usedHint: true,
     );
+    final task = state.currentTask;
+    final client = _client;
+    if (task == null || client == null || state.sessionId == null) return;
+    _requestSupport(client, task);
+  }
+
+  Future<void> _requestSupport(SupabaseClient client, DeepeningTaskPayload task) async {
+    try {
+      final response = await client.functions.invoke('deepening-support', body: {
+        'child_id': task.userId,
+        'session_id': state.sessionId,
+        'task_id': task.taskId,
+        'vertical_id': task.verticalId,
+      });
+      final data = Map<String, dynamic>.from(response.data as Map);
+      final level = data['support_level'];
+      if (level is int) {
+        state = state.copyWith(supportLadderLevel: level.clamp(0, 5).toInt());
+      }
+    } catch (e) {
+      debugPrint('[DeepeningController] Support request error: $e');
+    }
   }
 
   Future<bool> submitResponse({
