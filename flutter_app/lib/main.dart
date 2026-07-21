@@ -7,6 +7,7 @@ import 'core/services/supabase_service.dart';
 import 'core/services/firebase_service.dart';
 import 'core/services/notification_service.dart';
 import 'features/onboarding/widgets/neuro_spark_intake_flow.dart';
+import 'core/router/app_router.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -46,8 +47,9 @@ class NeuroSparkApp extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     // 1. Listen to global SafeModeProvider
     final safeMode = ref.watch(safeModeProvider);
+    final router = ref.watch(routerProvider);
 
-    return MaterialApp(
+    return MaterialApp.router(
       title: 'NeuroSpark Accessibility App',
       debugShowCheckedModeBanner: false,
       
@@ -56,7 +58,7 @@ class NeuroSparkApp extends ConsumerWidget {
       darkTheme: AppTheme.darkTheme,
       themeMode: safeMode.isEnabled ? ThemeMode.dark : ThemeMode.light,
       
-      home: const NeuroSparkIntakeFlow(),
+      routerConfig: router,
     );
   }
 }
