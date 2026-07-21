@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../features/dashboard/widgets/dashboard_screen.dart';
 import '../../features/deepening/presentation/deepening_funnel_canvas.dart';
 import '../../features/deepening/providers/deepening_controller.dart';
+import '../../features/sandbox/presentation/engine4_sandbox_screen.dart';
 import '../auth/supabase_auth_repository.dart';
 
 final authStatusProvider = StateProvider<AuthUserStatus>((ref) {
@@ -79,6 +80,13 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/dashboard',
         builder: (context, state) => const DashboardScreen(),
+      ),
+      GoRoute(
+        path: '/sandbox',
+        builder: (context, state) {
+          final userId = authStatus.userId;
+          return Engine4SandboxScreen(userId: userId);
+        },
       ),
     ],
   );
