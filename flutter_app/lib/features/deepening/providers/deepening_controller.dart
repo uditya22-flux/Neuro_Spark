@@ -244,11 +244,21 @@ class DeepeningController extends StateNotifier<DeepeningState> {
     try {
       final function = state.phase == 'layer1' ? 'layer1-submit-response' : 'deepening-submit-response';
       final response = await client.functions.invoke(function, body: {
-        ...telemetry.toJson(),
         'child_id': userId,
         'session_id': state.sessionId,
+        'task_id': task.taskId,
+        'response_id': _pendingResponseId,
         'vertical_id': task.verticalId,
         'response': responseText,
+        'timing': {
+          'latency_ms': latencyMs,
+        },
+        'behavior': {
+          'retry_count': errorCount,
+          'hint_usage': state.usedHint ? 1 : 0,
+          'skipped': false,
+        },
+        ...telemetry.toJson(),
       });
       final result = Map<String, dynamic>.from(response.data as Map);
       
@@ -257,7 +267,7 @@ class DeepeningController extends StateNotifier<DeepeningState> {
         _showLayer1Task(_layer1Queue.first);
       } else {
         // Queue is empty, layer is complete
-        if (result['funnel_complete'] == true) {
+        if (result['funnel_complete'] == true || result['next_phase'] == 'complete') {
            state = state.copyWith(isSubmitting: false, isFunnelCompleted: true, currentTask: null);
         } else {
            state = state.copyWith(isSubmitting: false, currentTask: null);

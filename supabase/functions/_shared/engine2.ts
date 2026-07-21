@@ -453,53 +453,71 @@ export async function chooseVariant(
     return allowed[0];
   }
 
-  const response = await fetch(
-    Deno.env.get("OPENAI_BASE_URL") ??
-      "https://api.openai.com/v1/chat/completions",
-    {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: Deno.env.get("OPENAI_MODEL") ?? "gpt-4o-mini",
-        temperature: 0,
-        response_format: { type: "json_object" },
-        messages: [
-          {
-            role: "system",
-            content:
-              'Select exactly one allowed variant. Return JSON only: {"variant_id":"..."}. Never create content.',
-          },
-          {
-            role: "user",
-            content: JSON.stringify({
-              vertical_id: verticalId,
-              layer,
-              allowed_variants: allowed,
-              sensory_preferences: config?.sensory ?? {},
-              layout_complexity_tier: config?.layoutComplexityTier ??
-                "standard",
-              theme: config?.hyperFocusTheme ?? "general",
-            }),
-          },
-        ],
-      }),
-    },
-  );
-  if (!response.ok) {
-    throw new Error(`Task LLM request failed with status ${response.status}.`);
-  }
-  const result = await response.json();
-  const raw = result?.choices?.[0]?.message?.content;
-  let selected: string | undefined;
   try {
-    selected = JSON.parse(raw).variant_id;
-  } catch {
-    selected = undefined;
+    const headers: Record<string, string> = {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    };
+    const organization = Deno.env.get("OPENAI_ORGANIZATION");
+    if (organization) {
+      headers["OpenAI-Organization"] = organization;
+    }
+
+    const response = await fetch(
+      Deno.env.get("OPENAI_BASE_URL") ??
+        "https://api.openai.com/v1/chat/completions",
+      {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          model: Deno.env.get("OPENAI_MODEL") ?? "gpt-4o-mini",
+          temperature: 0,
+          response_format: { type: "json_object" },
+          messages: [
+            {
+              role: "system",
+              content:
+                'Select exactly one allowed variant. Return JSON only: {"variant_id":"..."}. Never create content.',
+            },
+            {
+              role: "user",
+              content: JSON.stringify({
+                vertical_id: verticalId,
+                layer,
+                allowed_variants: allowed,
+                sensory_preferences: config?.sensory ?? {},
+                layout_complexity_tier: config?.layoutComplexityTier ??
+                  "standard",
+                theme: config?.hyperFocusTheme ?? "general",
+              }),
+            },
+          ],
+        }),
+      },
+    );
+    if (!response.ok) {
+      console.warn(`[engine2:chooseVariant] LLM returned status ${response.status}. Falling back to deterministic variant.`);
+      if (Deno.env.get("TASK_LLM_REQUIRED") === "true") {
+        throw new Error(`Task LLM request failed with status ${response.status}.`);
+      }
+      return allowed[0];
+    }
+    const result = await response.json();
+    const raw = result?.choices?.[0]?.message?.content;
+    let selected: string | undefined;
+    try {
+      selected = JSON.parse(raw).variant_id;
+    } catch {
+      selected = undefined;
+    }
+    return allowed.find((item) => item.id === selected) ?? allowed[0];
+  } catch (err) {
+    console.warn(`[engine2:chooseVariant] LLM fetch error: ${err}. Falling back to deterministic variant.`);
+    if (Deno.env.get("TASK_LLM_REQUIRED") === "true") {
+      throw err;
+    }
+    return allowed[0];
   }
-  return allowed.find((item) => item.id === selected) ?? allowed[0];
 }
 
 export async function loadEngine1Config(
