@@ -283,13 +283,13 @@ class SduiController extends StateNotifier<SduiState> {
         background: const Color(0xFFF0F4F8),
         brightness: Brightness.light,
       );
-    } else if (favoriteColor.contains('terracotta')) {
-      // Muted Terracotta (Profile 3)
+    } else if (favoriteColor.contains('terracotta') || favoriteColor.contains('orange')) {
+      // Warm Vibrant Orange (#FF9F1C) (Profile 3)
       colorScheme = ColorScheme.fromSeed(
-        seedColor: const Color(0xFFC85A32),
-        primary: const Color(0xFFB34A23),
-        secondary: const Color(0xFFD67A43),
-        background: const Color(0xFFFAF5EF),
+        seedColor: const Color(0xFFFF9F1C),
+        primary: const Color(0xFFFF9F1C),
+        secondary: const Color(0xFFFFB703),
+        background: const Color(0xFFFFF9F2),
         brightness: Brightness.light,
       );
     } else if (favoriteColor.contains('deep_sea_indigo')) {

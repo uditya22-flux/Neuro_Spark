@@ -66,7 +66,7 @@ class _EmotionHubWidgetState extends ConsumerState<EmotionHubWidget> {
                     runSpacing: 12,
                     children: [
                       _buildFeelingTile('☀️', 'Calm / Sunny', const Color(0xFF68A357), cardWidth),
-                      _buildFeelingTile('⛈️', 'Stormy / Chaotic', const Color(0xFFC85A32), cardWidth),
+                      _buildFeelingTile('⛈️', 'Stormy / Chaotic', const Color(0xFFFF9F1C), cardWidth),
                       _buildFeelingTile('⚡', 'Sensory Overload', const Color(0xFFFBBF24), cardWidth),
                       _buildFeelingTile('☁️', 'Tired / Foggy', const Color(0xFF5B8CAE), cardWidth),
                     ],

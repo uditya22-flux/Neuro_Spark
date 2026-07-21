@@ -32,7 +32,7 @@ class DynamicHeader extends ConsumerWidget {
       greeting = "Welcome aboard Chief Conductor ${profile.userProfile.name}!";
       subtitle = "Departing Platform 3: Trains & Railways";
       interestIcon = Icons.train_rounded;
-      iconColor = const Color(0xFFC85A32);
+      iconColor = const Color(0xFFFF9F1C);
     } else if (interest.contains('marine')) {
       greeting = "Ahoy Marine Biologist ${profile.userProfile.name}!";
       subtitle = "Exploring the Deep Indigo Trench";
