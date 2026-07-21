@@ -100,7 +100,8 @@ void main() {
         ),
       );
 
-      await tester.pumpAndSettle();
+      await tester.pump(const Duration(seconds: 1));
+      await tester.pump(const Duration(seconds: 1));
 
       expect(router.state.matchedLocation, equals('/assessment-canvas'));
       expect(find.byType(DeepeningFunnelCanvas), findsOneWidget);

@@ -114,7 +114,7 @@ class DeepeningController extends StateNotifier<DeepeningState> {
         ..addAll(rows);
       _verticalQueue
         ..clear()
-        ..addAll((data['active_verticals'] as List<dynamic>? ?? rows.map((t) => t.verticalId)).cast<String>());
+        ..addAll((data['active_verticals'] as List<dynamic>?)?.cast<String>() ?? rows.map((t) => t.verticalId));
       state = state.copyWith(sessionId: data['session_id'] as String?, totalVerticals: _verticalQueue.length);
       if (_layer1Queue.isEmpty) throw Exception('No production verticals are active.');
       _showLayer1Task(_layer1Queue.first);
