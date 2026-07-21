@@ -141,6 +141,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
           config,
           pConfig.modality,
           pConfig.difficulty,
+          previousScores[verticalId],
         );
         const hash = await contentHash({
           verticalId,

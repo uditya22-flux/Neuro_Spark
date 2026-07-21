@@ -1,5 +1,6 @@
 import {
   assertEquals,
+  assertExists,
   assertFalse,
 } from "https://deno.land/std@0.224.0/assert/mod.ts";
 import {
@@ -84,4 +85,25 @@ Deno.test("Engine 2.b path and support transitions stay bounded", () => {
   assertEquals(scored.accuracy, 1);
   assertEquals(scored.latencyMs, 0);
   assertFalse(Number.isNaN(scored.isolationScore));
+});
+
+Deno.test("Engine 2 discovery mode uses independent domains (not calendar/constellation)", async () => {
+  const { createTask } = await import("../functions/_shared/engine2.ts");
+  const task = await createTask("discovery", 1, "test-seed", {
+    activeVerticals: [],
+    sensory: { low_contrast: false, slow_motion: false },
+    layoutComplexityTier: "standard",
+    hyperFocusTheme: "calm"
+  }, "visual", "baseline", { accuracy: 1.0 });
+
+  // Must be in the discovery vertical
+  assertEquals(task.verticalId, "discovery");
+  // Must NOT be a calendar or constellation task
+  assertFalse((task.payload as Record<string, string>).kind === "calendar-order");
+  assertFalse((task.payload as Record<string, string>).kind === "constellation-anomaly");
+  // Must be a known discovery domain kind
+  const validKinds = ["shape-sort", "colour-pattern", "number-sequence", "spatial-mirror", "memory-match"];
+  assertExists(validKinds.find(k => k === (task.payload as Record<string, string>).kind));
+  // Answer key must not expose the answer in the payload
+  assertFalse(JSON.stringify(task.payload).includes(JSON.stringify(task.answerKey)));
 });

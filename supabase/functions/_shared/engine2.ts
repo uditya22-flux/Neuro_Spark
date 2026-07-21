@@ -1,6 +1,6 @@
 import { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-export const VERTICALS = ["calendar_genius", "constellation_mapper"] as const;
+export const VERTICALS = ["calendar_genius", "constellation_mapper", "discovery"] as const;
 export type VerticalId = typeof VERTICALS[number];
 export type SourceType = "curated" | "predicted" | "created";
 export type PathType = "accelerated" | "standard" | "supported";
@@ -520,6 +520,174 @@ export async function orchestrateLayer(
   }
 }
 
+// ─── Discovery Domain Definitions ────────────────────────────────────────────
+// These are completely independent from calendar_genius or constellation_mapper.
+// The discovery funnel tests broad foundational skills (shape reasoning, colour
+// patterns, sequences, spatial logic, memory) so the engine can surface the
+// child's strengths without presupposing the output vertical.
+
+const SHAPES = ["circle", "square", "triangle", "star", "hexagon", "diamond", "rectangle", "oval"] as const;
+const COLOURS = ["red", "blue", "green", "yellow", "orange", "purple", "pink", "brown"] as const;
+
+type DiscoveryDomain = "shape_sort" | "colour_pattern" | "number_sequence" | "spatial_mirror" | "memory_match";
+
+// How many question domains are unlocked per layer (more domains = harder)
+function discoveryDomainsForLayer(layer: number): DiscoveryDomain[] {
+  const all: DiscoveryDomain[] = ["shape_sort", "colour_pattern", "number_sequence", "spatial_mirror", "memory_match"];
+  // Layer 1-2: simple shape/colour; layers 3-5 add sequences; layers 6+ add spatial/memory
+  if (layer <= 2) return ["shape_sort", "colour_pattern"];
+  if (layer <= 5) return ["shape_sort", "colour_pattern", "number_sequence"];
+  return all;
+}
+
+function discoveryDifficulty(layer: number): "baseline" | "progressive" | "advanced" {
+  if (layer >= 7) return "advanced";
+  if (layer >= 2) return "progressive";
+  return "baseline";
+}
+
+function buildShapeSort(layer: number, seed: string): { payload: Record<string, unknown>; answerKey: Record<string, unknown> } {
+  const shapeCount = 3 + Math.min(layer, 5); // 4 to 8 shapes
+  const targetIdx = seededNumber(`${seed}:tgt`, shapeCount);
+  const shapes = Array.from({ length: shapeCount }, (_, i) =>
+    SHAPES[(seededNumber(`${seed}:s${i}`, SHAPES.length))]);
+  const target = shapes[targetIdx];
+  // The odd-one-out: replace target with a different shape
+  const oddShape = SHAPES[(SHAPES.indexOf(target as typeof SHAPES[number]) + 1 + seededNumber(`${seed}:odd`, SHAPES.length - 1)) % SHAPES.length];
+  const options = [...shapes];
+  options[targetIdx] = oddShape;
+  return {
+    payload: {
+      kind: "shape-sort",
+      prompt: `Which shape does NOT belong in this group?`,
+      shapes: options,
+      distractor_count: Math.floor(layer / 3),
+    },
+    answerKey: { odd_shape_index: targetIdx, odd_shape: oddShape },
+  };
+}
+
+function buildColourPattern(layer: number, seed: string): { payload: Record<string, unknown>; answerKey: Record<string, unknown> } {
+  const patternLen = 3 + Math.min(layer - 1, 4); // 3 to 7 colours in sequence
+  const sequence = Array.from({ length: patternLen }, (_, i) =>
+    COLOURS[seededNumber(`${seed}:c${i}`, COLOURS.length)]);
+  const nextColour = COLOURS[seededNumber(`${seed}:next`, COLOURS.length)];
+  return {
+    payload: {
+      kind: "colour-pattern",
+      prompt: "What colour comes next in the pattern?",
+      sequence,
+      options: COLOURS.slice(0, 4 + Math.floor(layer / 3)),
+    },
+    answerKey: { expected: nextColour },
+  };
+}
+
+function buildNumberSequence(layer: number, seed: string): { payload: Record<string, unknown>; answerKey: Record<string, unknown> } {
+  const step = 1 + seededNumber(`${seed}:step`, layer + 1); // step size grows with layer
+  const start = 1 + seededNumber(`${seed}:start`, 10);
+  const length = 4 + Math.min(layer, 3);
+  const sequence = Array.from({ length }, (_, i) => start + i * step);
+  const nextVal = start + length * step;
+  return {
+    payload: {
+      kind: "number-sequence",
+      prompt: "What number comes next?",
+      sequence,
+    },
+    answerKey: { expected: nextVal },
+  };
+}
+
+function buildSpatialMirror(layer: number, seed: string): { payload: Record<string, unknown>; answerKey: Record<string, unknown> } {
+  const gridSize = 3 + Math.floor(layer / 4); // 3x3 to 5x5
+  const cells = Array.from({ length: gridSize * gridSize }, (_, i) => seededNumber(`${seed}:cell${i}`, 2));
+  // The "mirror" answer is the horizontal flip of the row at position seededNumber
+  const targetRow = seededNumber(`${seed}:row`, gridSize);
+  const row = cells.slice(targetRow * gridSize, (targetRow + 1) * gridSize);
+  const mirrored = [...row].reverse();
+  return {
+    payload: {
+      kind: "spatial-mirror",
+      prompt: "Which row is the mirror image of the highlighted row?",
+      grid: cells,
+      grid_size: gridSize,
+      target_row: targetRow,
+    },
+    answerKey: { mirrored_row: mirrored },
+  };
+}
+
+function buildMemoryMatch(layer: number, seed: string): { payload: Record<string, unknown>; answerKey: Record<string, unknown> } {
+  const pairCount = 2 + Math.min(layer, 4); // 2 to 6 pairs
+  const allShapes = Array.from({ length: pairCount }, (_, i) =>
+    SHAPES[seededNumber(`${seed}:m${i}`, SHAPES.length)]);
+  // Shuffle by seeding
+  const shuffled = [...allShapes, ...allShapes].sort((a, b) =>
+    seededNumber(`${seed}:sort${a}${b}`, 100) - 50);
+  return {
+    payload: {
+      kind: "memory-match",
+      prompt: "Remember the positions, then match the pairs.",
+      cards: shuffled,
+      pair_count: pairCount,
+    },
+    answerKey: { pairs: allShapes },
+  };
+}
+
+function discoveryTask(
+  layer: number,
+  seed: string,
+  theme: string,
+  modality: Modality,
+  previousScore?: Record<string, any>,
+): TaskCandidate {
+  // Select domain based on seed (not previous skill data — we don't presuppose the outcome)
+  const adaptSeed = previousScore?.accuracy
+    ? `${seed}:acc${Math.round(previousScore.accuracy * 10)}`
+    : seed;
+  const availableDomains = discoveryDomainsForLayer(layer);
+  const domain = availableDomains[seededNumber(`${adaptSeed}:domain`, availableDomains.length)];
+
+  let content: { payload: Record<string, unknown>; answerKey: Record<string, unknown> };
+  switch (domain) {
+    case "colour_pattern":
+      content = buildColourPattern(layer, adaptSeed);
+      break;
+    case "number_sequence":
+      content = buildNumberSequence(layer, adaptSeed);
+      break;
+    case "spatial_mirror":
+      content = buildSpatialMirror(layer, adaptSeed);
+      break;
+    case "memory_match":
+      content = buildMemoryMatch(layer, adaptSeed);
+      break;
+    case "shape_sort":
+    default:
+      content = buildShapeSort(layer, adaptSeed);
+      break;
+  }
+
+  return {
+    verticalId: "discovery",
+    layer,
+    sourceType: layer === 1 ? "curated" : "created",
+    difficultyTier: discoveryDifficulty(layer),
+    modality,
+    payload: {
+      ...content.payload,
+      theme_skin: theme,
+      modality,
+      domain,
+      objective: layerObjective(layer),
+    },
+    answerKey: content.answerKey,
+    ruleVersion: `discovery-v1-layer-${layer}-${domain}`,
+  };
+}
+
 export async function createTask(
   verticalId: VerticalId,
   layer: number,
@@ -527,6 +695,7 @@ export async function createTask(
   config: Engine1Config,
   modality: Modality = "visual",
   forcedDifficulty?: "baseline" | "progressive" | "advanced",
+  previousScore?: Record<string, any>,
 ): Promise<TaskCandidate> {
   const allowed = [
     {
@@ -550,7 +719,9 @@ export async function createTask(
   }
   const theme = config.hyperFocusTheme ||
     (choice.id === "calm-visual" ? "calm" : "general");
-  const task = verticalId === "calendar_genius"
+  const task = verticalId === "discovery"
+    ? discoveryTask(layer, seed, theme, normalizeModality(choice.modality), previousScore)
+    : verticalId === "calendar_genius"
     ? calendarTask(layer, seed, theme, normalizeModality(choice.modality))
     : constellationTask(layer, seed, theme, normalizeModality(choice.modality));
   task.sourceType = layer === 1
