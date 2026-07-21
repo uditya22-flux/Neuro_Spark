@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -68,8 +70,8 @@ class DeepeningController extends StateNotifier<DeepeningState> {
   final Ref ref;
   final Stopwatch _latencyStopwatch = Stopwatch();
   final List<DeepeningTaskPayload> _layer1Queue = [];
-  final List<String> _verticalQueue = [];
-  int _completedVerticals = 0;
+
+  String? _pendingResponseId;
 
   DeepeningController(this.ref) : super(const DeepeningState());
 
@@ -112,10 +114,7 @@ class DeepeningController extends StateNotifier<DeepeningState> {
       _layer1Queue
         ..clear()
         ..addAll(rows);
-      _verticalQueue
-        ..clear()
-        ..addAll((data['active_verticals'] as List<dynamic>?)?.cast<String>() ?? rows.map((t) => t.verticalId));
-      state = state.copyWith(sessionId: data['session_id'] as String?, totalVerticals: _verticalQueue.length);
+      state = state.copyWith(sessionId: data['session_id'] as String?, totalVerticals: rows.length);
       if (_layer1Queue.isEmpty) throw Exception('No production verticals are active.');
       _showLayer1Task(_layer1Queue.first);
     } catch (e) {
@@ -129,21 +128,24 @@ class DeepeningController extends StateNotifier<DeepeningState> {
     state = state.copyWith(
       currentTask: task,
       isLoading: false,
+      isSubmitting: false,
       currentLayer: task.layer,
       supportLadderLevel: task.supportLevel,
       usedHint: false,
-      phase: 'layer1',
+      phase: task.layer == 1 ? 'layer1' : 'deepening',
     );
+    _pendingResponseId = null;
     _latencyStopwatch..reset()..start();
   }
 
-  Future<void> _fetchDeepeningTask(String childId, String verticalId) async {
+  Future<void> _fetchDeepeningTask(String childId, String? ignoredVerticalId) async {
     final sessionId = state.sessionId;
     if (sessionId == null) return;
     state = state.copyWith(isLoading: true, errorMessage: null);
     _latencyStopwatch..reset()..start();
     final client = _client;
     if (client == null) {
+      _pendingResponseId = null;
       state = state.copyWith(currentTask: _generateFallbackTask(childId, state.currentLayer), isLoading: false);
       return;
     }
@@ -151,20 +153,25 @@ class DeepeningController extends StateNotifier<DeepeningState> {
       final response = await client.functions.invoke('deepening-next-task', body: {
         'child_id': childId,
         'session_id': sessionId,
-        'vertical_id': verticalId,
       });
-      final payload = DeepeningTaskPayload.fromJson({
-        ...Map<String, dynamic>.from(response.data as Map),
-        'user_id': childId,
-      });
-      state = state.copyWith(
-        currentTask: payload,
-        isLoading: false,
-        currentLayer: payload.layer,
-        supportLadderLevel: payload.supportLevel,
-        usedHint: false,
-        phase: 'deepening',
-      );
+      final data = Map<String, dynamic>.from(response.data as Map);
+      if (data['status'] == 'funnel_complete') {
+        state = state.copyWith(isFunnelCompleted: true, isLoading: false, currentTask: null);
+        return;
+      }
+      
+      final rows = (data['verticals'] as List<dynamic>? ?? [])
+          .map((row) => DeepeningTaskPayload.fromJson({...Map<String, dynamic>.from(row as Map), 'session_id': sessionId, 'user_id': childId}))
+          .toList();
+          
+      if (rows.isEmpty) {
+        throw Exception('No tasks returned for the layer.');
+      }
+      
+      _layer1Queue
+        ..clear()
+        ..addAll(rows);
+      _showLayer1Task(_layer1Queue.first);
     } catch (e) {
       debugPrint('[DeepeningController] Deepening task error: $e');
       state = state.copyWith(isLoading: false, errorMessage: 'The next task could not be loaded. Please try again.');
@@ -189,9 +196,11 @@ class DeepeningController extends StateNotifier<DeepeningState> {
     if (task == null) return false;
     state = state.copyWith(isSubmitting: true, errorMessage: null);
     final latencyMs = _latencyStopwatch.elapsedMilliseconds;
+    _pendingResponseId ??= _newResponseId();
     final engagementScore = (accuracy * 0.5) + (state.usedHint ? 0.2 : 0.4) + (latencyMs < 15000 ? 0.1 : 0.0);
     final telemetry = TelemetryPayload(
       taskId: task.taskId,
+      responseId: _pendingResponseId,
       userId: userId,
       sessionId: state.sessionId ?? task.sessionId,
       layer: task.layer,
@@ -220,36 +229,18 @@ class DeepeningController extends StateNotifier<DeepeningState> {
         'response': responseText,
       });
       final result = Map<String, dynamic>.from(response.data as Map);
-      if (state.phase == 'layer1') {
-        _layer1Queue.removeWhere((queued) => queued.taskId == task.taskId);
-        if (_layer1Queue.isNotEmpty) {
-          _showLayer1Task(_layer1Queue.first);
-        } else if (result['layer1_complete'] == true) {
-          state = state.copyWith(phase: 'deepening', isSubmitting: false, currentTask: null);
-          _completedVerticals = 0;
-          if (_verticalQueue.isEmpty) _verticalQueue.add(task.verticalId);
-          await _fetchDeepeningTask(userId, _verticalQueue.first);
-        } else {
-          state = state.copyWith(isSubmitting: false, currentTask: null);
-        }
-        return true;
-      }
-      final funnelComplete = result['funnel_complete'] == true;
-      if (funnelComplete) {
-        _completedVerticals++;
-        final nextVertical = _verticalQueue.where((vertical) => vertical != task.verticalId).firstWhere(
-          (_) => true,
-          orElse: () => '',
-        );
-        if (nextVertical.isNotEmpty && _completedVerticals < _verticalQueue.length) {
-          state = state.copyWith(isSubmitting: false, currentTask: null, completedVerticals: _completedVerticals);
-          await _fetchDeepeningTask(userId, nextVertical);
-        } else {
-          state = state.copyWith(isSubmitting: false, isFunnelCompleted: true, completedVerticals: _completedVerticals);
-        }
+      
+      _layer1Queue.removeWhere((queued) => queued.taskId == task.taskId);
+      if (_layer1Queue.isNotEmpty) {
+        _showLayer1Task(_layer1Queue.first);
       } else {
-        state = state.copyWith(isSubmitting: false);
-        await _fetchDeepeningTask(userId, task.verticalId);
+        // Queue is empty, layer is complete
+        if (result['funnel_complete'] == true) {
+           state = state.copyWith(isSubmitting: false, isFunnelCompleted: true, currentTask: null);
+        } else {
+           state = state.copyWith(isSubmitting: false, currentTask: null);
+           await _fetchDeepeningTask(userId, null);
+        }
       }
       return true;
     } catch (e) {
@@ -259,6 +250,13 @@ class DeepeningController extends StateNotifier<DeepeningState> {
     }
   }
 
+  String _newResponseId() {
+    final random = Random.secure();
+    String hex(int length) => List.generate(length, (_) => random.nextInt(16).toRadixString(16)).join();
+    final variant = ['8', '9', 'a', 'b'][random.nextInt(4)];
+    return '${hex(8)}-${hex(4)}-4${hex(3)}-$variant${hex(3)}-${hex(12)}';
+  }
+
   DeepeningTaskPayload _generateFallbackTask(String userId, int layer) {
     final verticalId = (layer % 2 == 1) ? 'calendar_genius' : 'constellation_mapper';
     final skins = ['cosmic_space', 'sage_green', 'pastel_dinosaur', 'terracotta_train'];
@@ -266,7 +264,7 @@ class DeepeningController extends StateNotifier<DeepeningState> {
     if (verticalId == 'calendar_genius') {
       return DeepeningTaskPayload(
         taskId: 'offline_cal_$layer', userId: userId, layer: layer, verticalId: 'calendar_genius', themeSkin: skin,
-        prompt: 'Find the day of the week for July 20, 2026.', taskData: {'target_date': '2026-07-20', 'correct_day': 'Monday'},
+        prompt: 'Find the day of the week for July 20, 2026.', taskData: {'target_date': '2026-07-20'},
       );
     }
     return DeepeningTaskPayload(

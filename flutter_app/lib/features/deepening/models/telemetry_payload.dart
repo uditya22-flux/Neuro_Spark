@@ -1,5 +1,6 @@
 class TelemetryPayload {
   final String taskId;
+  final String? responseId;
   final String userId;
   final String sessionId;
   final int layer;
@@ -17,6 +18,7 @@ class TelemetryPayload {
 
   const TelemetryPayload({
     required this.taskId,
+    this.responseId,
     required this.userId,
     this.sessionId = '',
     required this.layer,
@@ -35,6 +37,7 @@ class TelemetryPayload {
 
   Map<String, dynamic> toJson() => {
         'task_id': taskId,
+        if (responseId != null) 'response_id': responseId,
         'user_id': userId,
         'session_id': sessionId,
         'layer': layer,

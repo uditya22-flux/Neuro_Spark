@@ -17,7 +17,6 @@ class NotificationService {
     const DarwinInitializationSettings initializationSettingsIOS =
         DarwinInitializationSettings(
       requestAlertPermission: false,
-      requestBadgePermission: false,
       requestSoundPermission: false,
     );
 
@@ -67,7 +66,6 @@ class NotificationService {
       const DarwinNotificationDetails iosSilent = DarwinNotificationDetails(
         presentSound: false,
         presentAlert: true,
-        presentBadge: true,
       );
 
       platformChannelSpecifics = const NotificationDetails(
@@ -93,7 +91,6 @@ class NotificationService {
         sound: 'marimba_hum.caf',
         presentSound: true,
         presentAlert: true,
-        presentBadge: true,
       );
 
       platformChannelSpecifics = NotificationDetails(

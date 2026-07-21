@@ -60,7 +60,11 @@ class _CalendarGeniusTaskWidgetState extends State<CalendarGeniusTaskWidget> {
   void _handleCheckAnswer() {
     if (_selectedDay == null) return;
 
-    final correctAnswer = widget.payload.taskData['correct_day'] as String? ?? 'Monday';
+    // The server deliberately withholds the answer key. Derive the visible
+    // calendar answer locally for feedback; the server remains authoritative
+    // when the response is submitted.
+    final targetDate = widget.payload.taskData['target_date'] as String?;
+    final correctAnswer = targetDate == null ? 'Monday' : _dayForDate(targetDate);
     final isCorrect = _selectedDay!.toLowerCase() == correctAnswer.toLowerCase();
 
     HapticFeedback.mediumImpact();
@@ -89,6 +93,16 @@ class _CalendarGeniusTaskWidgetState extends State<CalendarGeniusTaskWidget> {
       response: _selectedDay!,
       errorCount: _errorCount,
     );
+  }
+
+  String _dayForDate(String value) {
+    try {
+      final date = DateTime.parse(value).toUtc();
+      const days = <String>['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+      return days[date.weekday - 1];
+    } catch (_) {
+      return 'Monday';
+    }
   }
 
   @override

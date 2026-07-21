@@ -53,8 +53,8 @@ Deno.test('intake — submission with PII redaction', async () => {
       .eq('id', data.id as string)
       .single();
 
-    assertStringIncludes(stored.redacted_text, '[redacted-phone]');
-    assertStringIncludes(stored.redacted_text, '[redacted-email]');
+    assertStringIncludes(stored!.redacted_text, '[redacted-phone]');
+    assertStringIncludes(stored!.redacted_text, '[redacted-email]');
   } finally {
     await cleanupGuardian(guardian.id);
   }

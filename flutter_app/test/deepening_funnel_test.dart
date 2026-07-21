@@ -12,6 +12,7 @@ void main() {
     test('TelemetryPayload serializes performance metrics correctly', () {
       const telemetry = TelemetryPayload(
         taskId: 'task_1',
+        responseId: '550e8400-e29b-41d4-a716-446655440000',
         userId: 'user_101',
         layer: 1,
         accuracy: 1.0,
@@ -24,6 +25,7 @@ void main() {
 
       final json = telemetry.toJson();
       expect(json['task_id'], equals('task_1'));
+      expect(json['response_id'], equals('550e8400-e29b-41d4-a716-446655440000'));
       expect(json['accuracy'], equals(1.0));
       expect(json['latency_ms'], equals(3400));
       expect(json['recovery_count'], equals(0));
