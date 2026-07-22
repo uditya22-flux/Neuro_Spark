@@ -85,6 +85,7 @@ void main() {
             (ref) => const AuthUserStatus(
               isLoggedIn: true,
               userId: 'user_101',
+              hasCompletedIntake: true,
               hasCompletedAssessment: false,
             ),
           ),

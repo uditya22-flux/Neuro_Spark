@@ -176,6 +176,15 @@ class NeuroProfile {
     );
   }
 
+  String get themeSkin {
+    final color = affinities.favoriteColor.toLowerCase();
+    final fixation = interests.primaryHyperFixation.toLowerCase();
+    if (color.contains('green') || fixation.contains('nature')) return 'sage_green';
+    if (color.contains('yellow') || fixation.contains('dinosaur') || color.contains('pastel')) return 'pastel_dinosaur';
+    if (color.contains('orange') || color.contains('red') || fixation.contains('train')) return 'terracotta_train';
+    return 'cosmic_space';
+  }
+
   Map<String, dynamic> toJson() => {
         'user_profile': userProfile.toJson(),
         'visual_environmental_affinities': affinities.toJson(),
