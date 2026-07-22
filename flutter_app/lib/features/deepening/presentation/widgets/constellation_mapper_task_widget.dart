@@ -33,7 +33,7 @@ class _ConstellationMapperTaskWidgetState extends State<ConstellationMapperTaskW
       case 'pastel_dinosaur':
         return const Color(0xFF5B8CAE);
       case 'terracotta_train':
-        return const Color(0xFFB34A23);
+        return const Color(0xFFFF9F1C);
       case 'cosmic_space':
       default:
         return const Color(0xFF5C6BC0);
