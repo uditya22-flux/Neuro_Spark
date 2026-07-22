@@ -306,7 +306,7 @@ class DeepeningController extends StateNotifier<DeepeningState> {
     return '${hex(8)}-${hex(4)}-4${hex(3)}-$variant${hex(3)}-${hex(12)}';
   }
 
-  DeepeningTaskPayload _generateFallbackTask(String userId, int layer) {
+  DeepeningTaskPayload _generateFallbackTask(String userId, int layer, {int? taskIndex}) {
     final verticals = [
       'calendar_genius',
       'constellation_mapper',
@@ -320,7 +320,7 @@ class DeepeningController extends StateNotifier<DeepeningState> {
       'logic_lens',
     ];
     // Randomize selection per layer and session seed so baseline discovery is unpredictable
-    final seed = ((state.sessionId?.hashCode ?? userId.hashCode) + layer * 31).abs();
+    final seed = ((state.sessionId?.hashCode ?? userId.hashCode) + layer * 31 + (taskIndex ?? 0) * 17).abs();
     final verticalId = verticals[seed % verticals.length];
     final skins = ['cosmic_space', 'sage_green', 'pastel_dinosaur', 'terracotta_train'];
     final skin = skins[seed % skins.length];
