@@ -237,48 +237,65 @@ class DeepeningController extends StateNotifier<DeepeningState> {
       modality: task.modality,
     );
     final client = _client;
-    if (client == null || state.sessionId == null) {
-      state = state.copyWith(isSubmitting: false, isFunnelCompleted: task.layer >= 10, currentLayer: task.layer + 1);
+    Map<String, dynamic> result = {};
+    if (client != null && state.sessionId != null) {
+      try {
+        final function = state.phase == 'layer1' ? 'layer1-submit-response' : 'deepening-submit-response';
+        final response = await client.functions.invoke(function, body: {
+          'child_id': userId,
+          'session_id': state.sessionId,
+          'task_id': task.taskId,
+          'response_id': _pendingResponseId,
+          'vertical_id': task.verticalId,
+          'response': responseText,
+          'timing': {
+            'latency_ms': latencyMs,
+          },
+          'behavior': {
+            'retry_count': errorCount,
+            'hint_usage': state.usedHint ? 1 : 0,
+            'skipped': false,
+          },
+          ...telemetry.toJson(),
+        });
+        if (response.data is Map) {
+          result = Map<String, dynamic>.from(response.data as Map);
+        }
+      } catch (e) {
+        debugPrint('[DeepeningController] Response submission warning: $e');
+      }
+    }
+
+    _layer1Queue.removeWhere((queued) => queued.taskId == task.taskId);
+    
+    if (result['funnel_complete'] == true || result['next_phase'] == 'complete' || task.layer >= 10) {
+      state = state.copyWith(isSubmitting: false, isFunnelCompleted: true, currentTask: null);
       return true;
     }
-    try {
-      final function = state.phase == 'layer1' ? 'layer1-submit-response' : 'deepening-submit-response';
-      final response = await client.functions.invoke(function, body: {
-        'child_id': userId,
-        'session_id': state.sessionId,
-        'task_id': task.taskId,
-        'response_id': _pendingResponseId,
-        'vertical_id': task.verticalId,
-        'response': responseText,
-        'timing': {
-          'latency_ms': latencyMs,
-        },
-        'behavior': {
-          'retry_count': errorCount,
-          'hint_usage': state.usedHint ? 1 : 0,
-          'skipped': false,
-        },
-        ...telemetry.toJson(),
-      });
-      final result = Map<String, dynamic>.from(response.data as Map);
+
+    if (_layer1Queue.isNotEmpty) {
+      _showLayer1Task(_layer1Queue.first);
+    } else {
+      final nextTaskIndex = (state.currentTask?.layer == 1) 
+          ? ((state.currentTask?.taskId.hashCode ?? 0).abs() % 29 + 2) 
+          : 1;
+      final nextLayer = _layer1Queue.isEmpty ? (task.layer < 10 ? task.layer + 1 : 10) : task.layer;
       
-      _layer1Queue.removeWhere((queued) => queued.taskId == task.taskId);
+      _populateFallbackQueue(userId, nextLayer);
       if (_layer1Queue.isNotEmpty) {
         _showLayer1Task(_layer1Queue.first);
       } else {
-        // Queue is empty, layer is complete
-        if (result['funnel_complete'] == true || result['next_phase'] == 'complete') {
-           state = state.copyWith(isSubmitting: false, isFunnelCompleted: true, currentTask: null);
-        } else {
-           state = state.copyWith(isSubmitting: false, currentTask: null);
-           await _fetchDeepeningTask(userId, null);
-        }
+        state = state.copyWith(isSubmitting: false, isFunnelCompleted: true, currentTask: null);
       }
-      return true;
-    } catch (e) {
-      debugPrint('[DeepeningController] Response error: $e');
-      state = state.copyWith(isSubmitting: false, errorMessage: 'Your response was not saved. Please try again.');
-      return false;
+    }
+    return true;
+  }
+
+  void _populateFallbackQueue(String userId, int layer) {
+    _layer1Queue.clear();
+    final count = layer == 1 ? 30 : 10;
+    for (int i = 1; i <= count; i++) {
+      _layer1Queue.add(_generateFallbackTask(userId, layer, taskIndex: i));
     }
   }
 

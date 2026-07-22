@@ -26,6 +26,17 @@ class _ChoicePatternTaskWidgetState extends State<ChoicePatternTaskWidget> {
   final _textController = TextEditingController();
 
   @override
+  void didUpdateWidget(ChoicePatternTaskWidget oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.payload.taskId != widget.payload.taskId) {
+      setState(() {
+        _selected = null;
+        _textController.clear();
+      });
+    }
+  }
+
+  @override
   void dispose() {
     _textController.dispose();
     super.dispose();
