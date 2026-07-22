@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/deepening_controller.dart';
 import 'widgets/calendar_genius_task_widget.dart';
 import 'widgets/constellation_mapper_task_widget.dart';
+import 'widgets/choice_pattern_task_widget.dart';
+import '../../dashboard/providers/sdui_controller.dart';
 
 class DeepeningFunnelCanvas extends ConsumerStatefulWidget {
   final String userId;
@@ -44,6 +46,7 @@ class _DeepeningFunnelCanvasState extends ConsumerState<DeepeningFunnelCanvas> {
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(deepeningControllerProvider);
+    final sduiProfile = ref.watch(sduiControllerProvider).profile;
     final controller = ref.read(deepeningControllerProvider.notifier);
 
     if (state.isFunnelCompleted) {
@@ -57,7 +60,7 @@ class _DeepeningFunnelCanvasState extends ConsumerState<DeepeningFunnelCanvas> {
                 const Icon(Icons.stars_rounded, size: 80, color: Color(0xFF4A7C59)),
                 const SizedBox(height: 16),
                 Text(
-                  'Adaptive Assessment Completed!',
+                  'Exploration Complete!',
                   style: Theme.of(context).textTheme.headlineMedium?.copyWith(
                         fontWeight: FontWeight.bold,
                         color: const Color(0xFF4A7C59),
@@ -66,7 +69,7 @@ class _DeepeningFunnelCanvasState extends ConsumerState<DeepeningFunnelCanvas> {
                 ),
                 const SizedBox(height: 12),
                 Text(
-                  'All 10 layer tasks were analyzed to generate your personalized strength profile.',
+                  'Your exploration is complete. A guardian can review the recorded experience.',
                   style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Colors.blueGrey[700]),
                   textAlign: TextAlign.center,
                 ),
@@ -94,7 +97,7 @@ class _DeepeningFunnelCanvasState extends ConsumerState<DeepeningFunnelCanvas> {
     }
 
     final task = state.currentTask;
-    final skin = task?.themeSkin ?? 'cosmic_space';
+    final skin = task?.themeSkin ?? sduiProfile?.themeSkin ?? 'cosmic_space';
     final bgColor = _getSkinBackgroundColor(skin);
 
     return Scaffold(
@@ -171,7 +174,7 @@ class _DeepeningFunnelCanvasState extends ConsumerState<DeepeningFunnelCanvas> {
                           onHintTriggered: controller.triggerSupportLadderHint,
                         )
                       else
-                        CalendarGeniusTaskWidget(
+                        ChoicePatternTaskWidget(
                           payload: task,
                           onSubmit: ({required accuracy, required response, required errorCount}) {
                             controller.submitResponse(

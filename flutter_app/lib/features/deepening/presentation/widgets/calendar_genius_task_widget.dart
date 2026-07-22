@@ -60,7 +60,11 @@ class _CalendarGeniusTaskWidgetState extends State<CalendarGeniusTaskWidget> {
   void _handleCheckAnswer() {
     if (_selectedDay == null) return;
 
-    final correctAnswer = widget.payload.taskData['correct_day'] as String? ?? 'Monday';
+    // The server deliberately withholds the answer key. Derive the visible
+    // calendar answer locally for feedback; the server remains authoritative
+    // when the response is submitted.
+    final targetDate = widget.payload.taskData['target_date'] as String?;
+    final correctAnswer = targetDate == null ? 'Monday' : _dayForDate(targetDate);
     final isCorrect = _selectedDay!.toLowerCase() == correctAnswer.toLowerCase();
 
     HapticFeedback.mediumImpact();
@@ -91,10 +95,25 @@ class _CalendarGeniusTaskWidgetState extends State<CalendarGeniusTaskWidget> {
     );
   }
 
+  String _dayForDate(String value) {
+    try {
+      final date = DateTime.parse(value).toUtc();
+      const days = <String>['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+      return days[date.weekday - 1];
+    } catch (_) {
+      return 'Monday';
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final themeColor = _getPrimaryThemeColor();
     final targetDate = widget.payload.taskData['target_date'] as String? ?? '2026-07-20';
+    final visibleDays = widget.payload.taskData['visible_options'] is List
+        ? (widget.payload.taskData['visible_options'] as List).map((value) => value.toString()).toList()
+        : _daysOfWeek;
+    final support = widget.payload.taskData['support'];
+    final supportMessage = support is Map ? support['message'] as String? : null;
 
     return Container(
       padding: const EdgeInsets.all(20.0),
@@ -155,6 +174,10 @@ class _CalendarGeniusTaskWidgetState extends State<CalendarGeniusTaskWidget> {
             widget.payload.prompt,
             style: Theme.of(context).textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.w600),
           ),
+          if (supportMessage != null) ...[
+            const SizedBox(height: 12),
+            Text(supportMessage, style: Theme.of(context).textTheme.bodyMedium),
+          ],
           const SizedBox(height: 16),
           Container(
             width: double.infinity,
@@ -183,7 +206,7 @@ class _CalendarGeniusTaskWidgetState extends State<CalendarGeniusTaskWidget> {
           Wrap(
             spacing: 10,
             runSpacing: 10,
-            children: _daysOfWeek.map((day) {
+            children: visibleDays.map((day) {
               final isSelected = _selectedDay == day;
               return ChoiceChip(
                 label: Text(day),

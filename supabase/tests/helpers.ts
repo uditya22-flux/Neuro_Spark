@@ -3,11 +3,15 @@
 //   supabase start
 //   deno test supabase/tests/ --allow-net --allow-env
 
-import { createClient, SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import {
+  createClient,
+  SupabaseClient,
+} from "https://esm.sh/@supabase/supabase-js@2";
 
-const SUPABASE_URL = Deno.env.get('TEST_SUPABASE_URL') ?? 'http://127.0.0.1:54321';
-const ANON_KEY = Deno.env.get('TEST_SUPABASE_ANON_KEY') ?? '';
-const SERVICE_KEY = Deno.env.get('TEST_SUPABASE_SERVICE_KEY') ?? '';
+const SUPABASE_URL = Deno.env.get("TEST_SUPABASE_URL") ??
+  "http://127.0.0.1:54321";
+const ANON_KEY = Deno.env.get("TEST_SUPABASE_ANON_KEY") ?? "";
+const SERVICE_KEY = Deno.env.get("TEST_SUPABASE_SERVICE_KEY") ?? "";
 
 // ---------------------------------------------------------------------------
 // Client builders
@@ -35,8 +39,9 @@ let counter = 0;
 
 export async function createTestGuardian(): Promise<TestGuardian> {
   counter++;
-  const email = `test-guardian-${counter}-${Date.now()}@mindbridge-test.invalid`;
-  const password = 'TestPass123!';
+  const email =
+    `test-guardian-${counter}-${Date.now()}@mindbridge-test.invalid`;
+  const password = "TestPass123!";
 
   const svc = serviceClient();
   const { data, error } = await svc.auth.admin.createUser({
@@ -44,7 +49,9 @@ export async function createTestGuardian(): Promise<TestGuardian> {
     password,
     email_confirm: true,
   });
-  if (error || !data.user) throw new Error(`createTestGuardian failed: ${error?.message}`);
+  if (error || !data.user) {
+    throw new Error(`createTestGuardian failed: ${error?.message}`);
+  }
 
   const userClient = createClient(SUPABASE_URL, ANON_KEY);
   await userClient.auth.signInWithPassword({ email, password });
@@ -58,24 +65,27 @@ export async function createTestGuardian(): Promise<TestGuardian> {
 
 export async function seedConsentVersion(svc: SupabaseClient): Promise<string> {
   const { data, error } = await svc
-    .from('consent_versions')
+    .from("consent_versions")
     .insert({
       version: `v-test-${Date.now()}`,
-      jurisdiction: 'IN',
-      document_url: 'https://example.com/consent.pdf',
+      jurisdiction: "IN",
+      document_url: "https://example.com/consent.pdf",
       active: true,
     })
-    .select('id')
+    .select("id")
     .single();
   if (error) throw new Error(`seedConsentVersion: ${error.message}`);
   return data.id;
 }
 
-export async function seedVerifiedGuardian(svc: SupabaseClient, guardianId: string): Promise<void> {
-  const { error } = await svc.from('parent_verifications').insert({
+export async function seedVerifiedGuardian(
+  svc: SupabaseClient,
+  guardianId: string,
+): Promise<void> {
+  const { error } = await svc.from("parent_verifications").insert({
     guardian_id: guardianId,
-    method: 'email_otp',
-    status: 'verified',
+    method: "email_otp",
+    status: "verified",
     verified_at: new Date().toISOString(),
   });
   if (error) throw new Error(`seedVerifiedGuardian: ${error.message}`);
@@ -86,10 +96,10 @@ export async function seedActiveConsent(
   guardianId: string,
   consentVersionId: string,
 ): Promise<void> {
-  const { error } = await svc.from('guardian_consents').insert({
+  const { error } = await svc.from("guardian_consents").insert({
     guardian_id: guardianId,
     consent_version_id: consentVersionId,
-    status: 'active',
+    status: "active",
     accepted_at: new Date().toISOString(),
   });
   if (error) throw new Error(`seedActiveConsent: ${error.message}`);
@@ -101,9 +111,13 @@ export async function seedChild(
 ): Promise<string> {
   const svc = serviceClient();
   const { data, error } = await svc
-    .from('children')
-    .insert({ guardian_id: guardianId, preferred_name: 'TestChild', birth_year: 2018 })
-    .select('id')
+    .from("children")
+    .insert({
+      guardian_id: guardianId,
+      preferred_name: "TestChild",
+      birth_year: 2018,
+    })
+    .select("id")
     .single();
   if (error) throw new Error(`seedChild: ${error.message}`);
   return data.id;
@@ -115,19 +129,32 @@ export async function seedChild(
 
 export async function cleanupGuardian(guardianId: string): Promise<void> {
   const svc = serviceClient();
-  const { data: children } = await svc.from('children').select('id').eq('guardian_id', guardianId);
+  const { data: children } = await svc.from("children").select("id").eq(
+    "guardian_id",
+    guardianId,
+  );
   const ids = (children ?? []).map((c: { id: string }) => c.id);
   if (ids.length > 0) {
-    await svc.from('discovery_intakes').delete().in('child_id', ids);
-    await svc.from('sensory_configurations').delete().in('child_id', ids);
-    await svc.from('child_experience').delete().in('child_id', ids);
-    await svc.from('adult_exploratory_note').delete().in('child_id', ids);
-    await svc.from('sessions').delete().in('child_id', ids);
-    await svc.from('children').delete().eq('guardian_id', guardianId);
+    await svc.from("discovery_intakes").delete().in("child_id", ids);
+    await svc.from("deepening_profiles").delete().in("child_id", ids);
+    await svc.from("stage3_handoffs").delete().in("child_id", ids);
+    await svc.from("consistency_window").delete().in("child_id", ids);
+    await svc.from("support_ladder_log").delete().in("child_id", ids);
+    await svc.from("layer_task_execution").delete().in("child_id", ids);
+    await svc.from("layer_progression_state").delete().in("child_id", ids);
+    await svc.from("stage2_handoffs").delete().in("child_id", ids);
+    await svc.from("sublayer_telemetry").delete().in("child_id", ids);
+    await svc.from("vertical_task_bank").delete().in("child_id", ids);
+    await svc.from("layer1_sessions").delete().in("child_id", ids);
+    await svc.from("sensory_configurations").delete().in("child_id", ids);
+    await svc.from("child_experience").delete().in("child_id", ids);
+    await svc.from("adult_exploratory_note").delete().in("child_id", ids);
+    await svc.from("sessions").delete().in("child_id", ids);
+    await svc.from("children").delete().eq("guardian_id", guardianId);
   }
-  await svc.from('guardian_consents').delete().eq('guardian_id', guardianId);
-  await svc.from('parent_verifications').delete().eq('guardian_id', guardianId);
-  await svc.from('purge_requests').delete().eq('guardian_id', guardianId);
-  await svc.from('audit_log').delete().eq('guardian_id', guardianId);
+  await svc.from("guardian_consents").delete().eq("guardian_id", guardianId);
+  await svc.from("parent_verifications").delete().eq("guardian_id", guardianId);
+  await svc.from("purge_requests").delete().eq("guardian_id", guardianId);
+  await svc.from("audit_log").delete().eq("guardian_id", guardianId);
   await svc.auth.admin.deleteUser(guardianId);
 }

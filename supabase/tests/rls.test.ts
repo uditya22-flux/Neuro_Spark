@@ -22,12 +22,12 @@ Deno.test('RLS — guardian A cannot read guardian B children', async () => {
     const { data, error } = await guardianA.client
       .from('children')
       .select('id')
-      .eq('id', child.id);
+      .eq('id', child!.id);
 
     assertEquals(error, null);
     assertEquals((data ?? []).length, 0, 'Guardian A must not see Guardian B children');
 
-    await svc.from('children').delete().eq('id', child.id);
+    await svc.from('children').delete().eq('id', child!.id);
   } finally {
     await cleanupGuardian(guardianA.id);
     await cleanupGuardian(guardianB.id);
@@ -58,7 +58,7 @@ Deno.test('RLS — guardian A cannot read guardian B intake', async () => {
       .single();
     await svc.from('discovery_intakes').insert({
       guardian_id: guardianB.id,
-      child_id: child.id,
+      child_id: child!.id,
       raw_text: 'sensitive',
       redacted_text: 'sensitive',
       expires_at: new Date(Date.now() + 86400000).toISOString(),
@@ -67,11 +67,11 @@ Deno.test('RLS — guardian A cannot read guardian B intake', async () => {
     const { data } = await guardianA.client
       .from('discovery_intakes')
       .select('id')
-      .eq('child_id', child.id);
+      .eq('child_id', child!.id);
 
     assertEquals((data ?? []).length, 0, 'Guardian A must not see Guardian B intakes');
 
-    await svc.from('children').delete().eq('id', child.id);
+    await svc.from('children').delete().eq('id', child!.id);
   } finally {
     await cleanupGuardian(guardianA.id);
     await cleanupGuardian(guardianB.id);
@@ -100,7 +100,7 @@ Deno.test('RLS — guardian A cannot read guardian B sessions', async () => {
       .select('id')
       .single();
     await svc.from('sessions').insert({
-      child_id: child.id,
+      child_id: child!.id,
       guardian_id: guardianB.id,
       expires_at: new Date(Date.now() + 3600000).toISOString(),
     });
@@ -108,10 +108,10 @@ Deno.test('RLS — guardian A cannot read guardian B sessions', async () => {
     const { data } = await guardianA.client
       .from('sessions')
       .select('id')
-      .eq('child_id', child.id);
+      .eq('child_id', child!.id);
 
     assertEquals((data ?? []).length, 0, 'Guardian A must not see Guardian B sessions');
-    await svc.from('children').delete().eq('id', child.id);
+    await svc.from('children').delete().eq('id', child!.id);
   } finally {
     await cleanupGuardian(guardianA.id);
     await cleanupGuardian(guardianB.id);

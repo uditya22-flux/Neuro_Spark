@@ -87,6 +87,8 @@ class _ConstellationMapperTaskWidgetState extends State<ConstellationMapperTaskW
   Widget build(BuildContext context) {
     final themeColor = _getPrimaryThemeColor();
     final starCount = widget.payload.taskData['total_star_nodes'] as int? ?? 6;
+    final support = widget.payload.taskData['support'];
+    final supportMessage = support is Map ? support['message'] as String? : null;
 
     return Container(
       padding: const EdgeInsets.all(20.0),
@@ -147,6 +149,10 @@ class _ConstellationMapperTaskWidgetState extends State<ConstellationMapperTaskW
             widget.payload.prompt,
             style: Theme.of(context).textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.w600),
           ),
+          if (supportMessage != null) ...[
+            const SizedBox(height: 12),
+            Text(supportMessage, style: Theme.of(context).textTheme.bodyMedium),
+          ],
           const SizedBox(height: 20),
           // Constellation star grid
           Container(
