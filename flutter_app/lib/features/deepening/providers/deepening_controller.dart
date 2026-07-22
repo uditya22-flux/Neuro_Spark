@@ -290,19 +290,85 @@ class DeepeningController extends StateNotifier<DeepeningState> {
   }
 
   DeepeningTaskPayload _generateFallbackTask(String userId, int layer) {
-    final verticalId = (layer % 2 == 1) ? 'calendar_genius' : 'constellation_mapper';
+    final verticals = [
+      'calendar_genius',
+      'constellation_mapper',
+      'discovery',
+      'visual_pattern_explorer',
+      'sequence_navigator',
+      'spatial_builder',
+      'memory_weaver',
+      'language_patterner',
+      'number_navigator',
+      'logic_lens',
+    ];
+    // Randomize selection per layer and session seed so baseline discovery is unpredictable
+    final seed = ((state.sessionId?.hashCode ?? userId.hashCode) + layer * 31).abs();
+    final verticalId = verticals[seed % verticals.length];
     final skins = ['cosmic_space', 'sage_green', 'pastel_dinosaur', 'terracotta_train'];
-    final skin = skins[(layer - 1).clamp(0, skins.length - 1).toInt()];
-    if (verticalId == 'calendar_genius') {
-      return DeepeningTaskPayload(
-        taskId: 'offline_cal_$layer', userId: userId, layer: layer, verticalId: 'calendar_genius', themeSkin: skin,
-        prompt: 'Find the day of the week for July 20, 2026.', taskData: {'target_date': '2026-07-20'},
-      );
+    final skin = skins[seed % skins.length];
+
+    switch (verticalId) {
+      case 'calendar_genius':
+        return DeepeningTaskPayload(
+          taskId: 'fallback_cal_$layer', userId: userId, layer: layer, verticalId: 'calendar_genius', themeSkin: skin,
+          prompt: 'Find the day of the week for July 20, 2026.', taskData: {'target_date': '2026-07-20'},
+        );
+      case 'constellation_mapper':
+        return DeepeningTaskPayload(
+          taskId: 'fallback_const_$layer', userId: userId, layer: layer, verticalId: 'constellation_mapper', themeSkin: skin,
+          prompt: 'Select four stars that belong to the same pattern.', taskData: {'required_stars': 4, 'total_star_nodes': 6},
+        );
+      case 'discovery':
+        return DeepeningTaskPayload(
+          taskId: 'fallback_disc_$layer', userId: userId, layer: layer, verticalId: 'discovery', themeSkin: skin,
+          prompt: 'Which path on the map leads to the hidden treasure emblem?',
+          taskData: {'options': ['Northern Pass', 'Crystal Cave', 'Sunset Valley', 'Echo River']},
+        );
+      case 'visual_pattern_explorer':
+        return DeepeningTaskPayload(
+          taskId: 'fallback_vis_$layer', userId: userId, layer: layer, verticalId: 'visual_pattern_explorer', themeSkin: skin,
+          prompt: 'Identify the tile pattern that completes the symmetrical sequence.',
+          taskData: {'options': ['Pattern A (Rotated)', 'Pattern B (Mirrored)', 'Pattern C (Shifted)', 'Pattern D (Inverted)']},
+        );
+      case 'sequence_navigator':
+        return DeepeningTaskPayload(
+          taskId: 'fallback_seq_$layer', userId: userId, layer: layer, verticalId: 'sequence_navigator', themeSkin: skin,
+          prompt: 'Arrange the sequence order to keep the train schedule on time.',
+          taskData: {'options': ['Station 1 -> 2 -> 3', 'Station 2 -> 1 -> 3', 'Station 3 -> 2 -> 1']},
+        );
+      case 'spatial_builder':
+        return DeepeningTaskPayload(
+          taskId: 'fallback_spat_$layer', userId: userId, layer: layer, verticalId: 'spatial_builder', themeSkin: skin,
+          prompt: 'Which 3D shape fits into the designated slot without overlapping?',
+          taskData: {'options': ['Blue Prism', 'Green Pyramid', 'Red Cylinder', 'Yellow Cube']},
+        );
+      case 'memory_weaver':
+        return DeepeningTaskPayload(
+          taskId: 'fallback_mem_$layer', userId: userId, layer: layer, verticalId: 'memory_weaver', themeSkin: skin,
+          prompt: 'Which item was shown first in the story sequence?',
+          taskData: {'options': ['Golden Key', 'Ancient Compass', 'Silver Lantern', 'Velvet Map']},
+        );
+      case 'language_patterner':
+        return DeepeningTaskPayload(
+          taskId: 'fallback_lang_$layer', userId: userId, layer: layer, verticalId: 'language_patterner', themeSkin: skin,
+          prompt: 'Find the word that follows the repeating rhyming pattern.',
+          taskData: {'options': ['Glow', 'Bright', 'Flow', 'Shine']},
+        );
+      case 'number_navigator':
+        return DeepeningTaskPayload(
+          taskId: 'fallback_num_$layer', userId: userId, layer: layer, verticalId: 'number_navigator', themeSkin: skin,
+          prompt: 'Identify the missing number in the step progression: 3, 6, 9, ?, 15.',
+          taskData: {'options': ['11', '12', '13', '14']},
+        );
+      case 'logic_lens':
+      default:
+        return DeepeningTaskPayload(
+          taskId: 'fallback_logic_$layer', userId: userId, layer: layer, verticalId: 'logic_lens', themeSkin: skin,
+          prompt: 'If shape A is larger than B, and B is larger than C, which shape is smallest?',
+          taskData: {'options': ['Shape A', 'Shape B', 'Shape C']},
+        );
     }
-    return DeepeningTaskPayload(
-      taskId: 'offline_const_$layer', userId: userId, layer: layer, verticalId: 'constellation_mapper', themeSkin: skin,
-      prompt: 'Select four stars that belong to the same pattern.', taskData: {'required_stars': 4, 'total_star_nodes': 6},
-    );
   }
 }
 
