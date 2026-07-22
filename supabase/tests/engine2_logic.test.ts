@@ -136,10 +136,8 @@ Deno.test("Engine 2 exposes ten exploration verticals and composes every task fr
   assertExists(composition.created_instance_id);
 });
 
-Deno.test("Engine 2 layer protocols enforce timing, modality, and held-difficulty rules", () => {
-  assertEquals(requiredExecutions(4), 4);
-  assertEquals(requiredExecutions(5), 4);
-  assertEquals(requiredExecutions(9), 3);
+  assertEquals(requiredExecutions(1), 30);
+  assertEquals(requiredExecutions(2), 10);
   assertEquals(layerProtocol("calendar_genius", 4).timingBudgetsMs, [
     60_000,
     45_000,

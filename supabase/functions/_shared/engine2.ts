@@ -146,9 +146,8 @@ export function pathLayers(path: PathType): number[] {
 }
 
 export function requiredExecutions(layer: number): number {
-  if (layer === 4 || layer === 5) return 4;
-  if (layer === 9) return 3;
-  return 1;
+  if (layer === 1) return 30;
+  return 10;
 }
 
 export function modalityForExecution(
