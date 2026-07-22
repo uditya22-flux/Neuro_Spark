@@ -4,6 +4,9 @@ import '../models/onboarding_state.dart';
 import '../providers/onboarding_controller.dart';
 import '../../dashboard/widgets/neuro_spark_dashboard.dart';
 
+import 'package:go_router/go_router.dart';
+import '../../../core/router/app_router.dart';
+
 class NeuroSparkIntakeFlow extends ConsumerStatefulWidget {
   const NeuroSparkIntakeFlow({super.key});
 
@@ -66,9 +69,13 @@ class _NeuroSparkIntakeFlowState extends ConsumerState<NeuroSparkIntakeFlow> {
     if (mounted) {
       setState(() => _isSubmitting = false);
       if (success) {
-        Navigator.of(context).pushReplacement(
-          MaterialPageRoute(builder: (_) => const NeuroSparkDashboard()),
+        ref.read(authStatusProvider.notifier).state = const AuthUserStatus(
+          isLoggedIn: true,
+          userId: 'user_guardian_101',
+          hasCompletedIntake: true,
+          hasCompletedAssessment: false,
         );
+        context.go('/assessment-canvas');
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Failed to initialize theme. Please try again.')),

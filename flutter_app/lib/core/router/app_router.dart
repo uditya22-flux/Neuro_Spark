@@ -7,22 +7,27 @@ import '../../features/deepening/presentation/deepening_funnel_canvas.dart';
 import '../../features/deepening/providers/deepening_controller.dart';
 import '../auth/supabase_auth_repository.dart';
 
+import '../../features/onboarding/widgets/neuro_spark_intake_flow.dart';
+
 final authStatusProvider = StateProvider<AuthUserStatus>((ref) {
   return const AuthUserStatus(
-    isLoggedIn: true, // Mock authenticated user state
+    isLoggedIn: true,
     userId: 'user_guardian_101',
-    hasCompletedAssessment: false, // Set to false to trigger assessment route post-login
+    hasCompletedIntake: false,
+    hasCompletedAssessment: false,
   );
 });
 
 class AuthUserStatus {
   final bool isLoggedIn;
   final String userId;
+  final bool hasCompletedIntake;
   final bool hasCompletedAssessment;
 
   const AuthUserStatus({
     required this.isLoggedIn,
     required this.userId,
+    required this.hasCompletedIntake,
     required this.hasCompletedAssessment,
   });
 }
@@ -31,21 +36,25 @@ final routerProvider = Provider<GoRouter>((ref) {
   final authStatus = ref.watch(authStatusProvider);
 
   return GoRouter(
-    initialLocation: authStatus.hasCompletedAssessment ? '/dashboard' : '/assessment-canvas',
+    initialLocation: !authStatus.hasCompletedIntake
+        ? '/intake'
+        : (!authStatus.hasCompletedAssessment ? '/assessment-canvas' : '/dashboard'),
     redirect: (BuildContext context, GoRouterState state) {
       if (!authStatus.isLoggedIn) {
         return '/login';
       }
 
-      final isNavigatingToAssessment = state.matchedLocation == '/assessment-canvas';
+      if (!authStatus.hasCompletedIntake && state.matchedLocation != '/intake') {
+        return '/intake';
+      }
 
-      // If user has not completed assessment, force routing to assessment canvas
-      if (!authStatus.hasCompletedAssessment && !isNavigatingToAssessment) {
+      if (authStatus.hasCompletedIntake &&
+          !authStatus.hasCompletedAssessment &&
+          state.matchedLocation != '/assessment-canvas') {
         return '/assessment-canvas';
       }
 
-      // If user has already completed assessment and tries to go to assessment, route to dashboard
-      if (authStatus.hasCompletedAssessment && isNavigatingToAssessment) {
+      if (authStatus.hasCompletedAssessment && state.matchedLocation != '/dashboard') {
         return '/dashboard';
       }
 
@@ -59,16 +68,20 @@ final routerProvider = Provider<GoRouter>((ref) {
         ),
       ),
       GoRoute(
+        path: '/intake',
+        builder: (context, state) => const NeuroSparkIntakeFlow(),
+      ),
+      GoRoute(
         path: '/assessment-canvas',
         builder: (context, state) {
           final userId = authStatus.userId;
           return DeepeningFunnelCanvas(
             userId: userId,
             onCompleted: () {
-              // Mark assessment as completed and navigate to dashboard
               ref.read(authStatusProvider.notifier).state = AuthUserStatus(
                 isLoggedIn: true,
                 userId: userId,
+                hasCompletedIntake: true,
                 hasCompletedAssessment: true,
               );
               context.go('/dashboard');
