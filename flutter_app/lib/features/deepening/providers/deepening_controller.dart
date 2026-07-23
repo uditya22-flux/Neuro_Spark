@@ -342,14 +342,29 @@ class DeepeningController extends StateNotifier<DeepeningState> {
 
     switch (verticalId) {
       case 'calendar_genius':
+        final dayOffset = (10 + layer).toString().padLeft(2, '0');
+        final targetDate = '2026-07-$dayOffset';
         return DeepeningTaskPayload(
-          taskId: 'fallback_cal_${layer}_$seed', userId: userId, layer: layer, totalLayers: totalQuestions, verticalId: 'calendar_genius', themeSkin: skin,
-          prompt: 'Find the day of the week for July 20, 2026.', taskData: {'target_date': '2026-07-20'},
+          taskId: 'fallback_cal_${layer}_$seed',
+          userId: userId,
+          layer: layer,
+          totalLayers: totalQuestions,
+          verticalId: 'calendar_genius',
+          themeSkin: skin,
+          prompt: 'Find the day of the week for July $dayOffset, 2026.',
+          taskData: {'target_date': targetDate, 'correct_day': 'Monday'},
         );
       case 'constellation_mapper':
+        final reqStars = (3 + (layer ~/ 2)).clamp(3, 7).toInt();
         return DeepeningTaskPayload(
-          taskId: 'fallback_const_${layer}_$seed', userId: userId, layer: layer, totalLayers: totalQuestions, verticalId: 'constellation_mapper', themeSkin: skin,
-          prompt: 'Select four stars that belong to the same pattern.', taskData: {'required_stars': 4, 'total_star_nodes': 6},
+          taskId: 'fallback_const_${layer}_$seed',
+          userId: userId,
+          layer: layer,
+          totalLayers: totalQuestions,
+          verticalId: 'constellation_mapper',
+          themeSkin: skin,
+          prompt: 'Select $reqStars stars that belong to the same pattern.',
+          taskData: {'required_stars': reqStars, 'total_star_nodes': reqStars + 2},
         );
       case 'discovery':
         return DeepeningTaskPayload(
