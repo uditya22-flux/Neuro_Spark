@@ -276,16 +276,17 @@ class DeepeningController extends StateNotifier<DeepeningState> {
     if (_layer1Queue.isNotEmpty) {
       _showLayer1Task(_layer1Queue.first);
     } else {
-      final nextTaskIndex = (state.currentTask?.layer == 1) 
-          ? ((state.currentTask?.taskId.hashCode ?? 0).abs() % 29 + 2) 
-          : 1;
-      final nextLayer = _layer1Queue.isEmpty ? (task.layer < 10 ? task.layer + 1 : 10) : task.layer;
-      
-      _populateFallbackQueue(userId, nextLayer);
-      if (_layer1Queue.isNotEmpty) {
-        _showLayer1Task(_layer1Queue.first);
+      if (_client != null) {
+        state = state.copyWith(isSubmitting: false, currentTask: null);
+        await _fetchDeepeningTask(userId, null);
       } else {
-        state = state.copyWith(isSubmitting: false, isFunnelCompleted: true, currentTask: null);
+        final nextLayer = task.layer < 10 ? task.layer + 1 : 10;
+        _populateFallbackQueue(userId, nextLayer);
+        if (_layer1Queue.isNotEmpty) {
+          _showLayer1Task(_layer1Queue.first);
+        } else {
+          state = state.copyWith(isSubmitting: false, isFunnelCompleted: true, currentTask: null);
+        }
       }
     }
     return true;
