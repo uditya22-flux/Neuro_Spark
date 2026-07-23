@@ -27,6 +27,7 @@ ios/DerivedData/
 macos/Flutter/ephemeral/
 
 # Secrets, local state, and developer-only analysis
+
 .env
 .env.*
 !.env.example
