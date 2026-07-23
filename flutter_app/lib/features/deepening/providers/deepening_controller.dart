@@ -173,8 +173,13 @@ class DeepeningController extends StateNotifier<DeepeningState> {
         ..addAll(rows);
       _showLayer1Task(_layer1Queue.first);
     } catch (e) {
-      debugPrint('[DeepeningController] Deepening task error: $e');
-      state = state.copyWith(isLoading: false, errorMessage: 'The next task could not be loaded. Please try again.');
+      debugPrint('[DeepeningController] Deepening task error: $e. Falling back to local offline task.');
+      _pendingResponseId = null;
+      state = state.copyWith(
+        currentTask: _generateFallbackTask(childId, state.currentLayer),
+        isLoading: false,
+        errorMessage: 'Using the safe offline task while the service reconnects.',
+      );
     }
   }
 
