@@ -41,7 +41,7 @@ class _Engine4SandboxScreenState extends ConsumerState<Engine4SandboxScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Skill-Building Sandbox'),
+        title: const Text('Open-ended play workshop'),
         centerTitle: true,
         elevation: 0,
         backgroundColor: Colors.transparent,
@@ -63,12 +63,12 @@ class _Engine4SandboxScreenState extends ConsumerState<Engine4SandboxScreen> {
                               segments: const [
                                 ButtonSegment(
                                   value: 'calendar_genius',
-                                  label: Text('Calendar Track'),
+                                  label: Text('Timeline workshop'),
                                   icon: Icon(Icons.calendar_today_rounded, size: 18),
                                 ),
                                 ButtonSegment(
                                   value: 'constellation_mapper',
-                                  label: Text('Spatial Track'),
+                                  label: Text('Constellation workshop'),
                                   icon: Icon(Icons.auto_awesome_rounded, size: 18),
                                 ),
                               ],

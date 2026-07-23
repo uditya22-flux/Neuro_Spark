@@ -32,7 +32,7 @@ class DeepeningState {
     this.phase = 'layer1',
     this.sessionId,
     this.completedVerticals = 0,
-    this.totalVerticals = 2,
+    this.totalVerticals = 30,
   });
 
   DeepeningState copyWith({
@@ -102,7 +102,10 @@ class DeepeningController extends StateNotifier<DeepeningState> {
     _latencyStopwatch..reset()..start();
     final client = _client;
     if (client == null) {
-      _showLayer1Task(_generateFallbackTask(childId, 1));
+      _populateFallbackQueue(childId, 1);
+      if (_layer1Queue.isNotEmpty) {
+        _showLayer1Task(_layer1Queue.first);
+      }
       return;
     }
     try {
@@ -115,12 +118,19 @@ class DeepeningController extends StateNotifier<DeepeningState> {
         ..clear()
         ..addAll(rows);
       state = state.copyWith(sessionId: data['session_id'] as String?, totalVerticals: rows.length);
-      if (_layer1Queue.isEmpty) throw Exception('No production verticals are active.');
-      _showLayer1Task(_layer1Queue.first);
+      if (_layer1Queue.isEmpty) {
+        _populateFallbackQueue(childId, 1);
+      }
+      if (_layer1Queue.isNotEmpty) {
+        _showLayer1Task(_layer1Queue.first);
+      }
     } catch (e) {
       debugPrint('[DeepeningController] Layer 1 error: $e');
-      _showLayer1Task(_generateFallbackTask(childId, 1));
-      state = state.copyWith(errorMessage: 'Using the safe offline task while the service reconnects.');
+      _populateFallbackQueue(childId, 1);
+      if (_layer1Queue.isNotEmpty) {
+        _showLayer1Task(_layer1Queue.first);
+      }
+      state = state.copyWith(errorMessage: 'Using safe offline tasks while service reconnects.');
     }
   }
 
@@ -146,7 +156,10 @@ class DeepeningController extends StateNotifier<DeepeningState> {
     final client = _client;
     if (client == null) {
       _pendingResponseId = null;
-      state = state.copyWith(currentTask: _generateFallbackTask(childId, state.currentLayer), isLoading: false);
+      _populateFallbackQueue(childId, state.currentLayer);
+      if (_layer1Queue.isNotEmpty) {
+        _showLayer1Task(_layer1Queue.first);
+      }
       return;
     }
     try {
@@ -165,7 +178,8 @@ class DeepeningController extends StateNotifier<DeepeningState> {
           .toList();
           
       if (rows.isEmpty) {
-        throw Exception('No tasks returned for the layer.');
+        state = state.copyWith(isFunnelCompleted: true, isLoading: false, currentTask: null);
+        return;
       }
       
       _layer1Queue
@@ -268,7 +282,7 @@ class DeepeningController extends StateNotifier<DeepeningState> {
 
     _layer1Queue.removeWhere((queued) => queued.taskId == task.taskId);
     
-    if (result['funnel_complete'] == true || result['next_phase'] == 'complete' || task.layer >= 10) {
+    if (result['funnel_complete'] == true || result['next_phase'] == 'complete') {
       state = state.copyWith(isSubmitting: false, isFunnelCompleted: true, currentTask: null);
       return true;
     }
@@ -276,11 +290,7 @@ class DeepeningController extends StateNotifier<DeepeningState> {
     if (_layer1Queue.isNotEmpty) {
       _showLayer1Task(_layer1Queue.first);
     } else {
-      final nextTaskIndex = (state.currentTask?.layer == 1) 
-          ? ((state.currentTask?.taskId.hashCode ?? 0).abs() % 29 + 2) 
-          : 1;
-      final nextLayer = _layer1Queue.isEmpty ? (task.layer < 10 ? task.layer + 1 : 10) : task.layer;
-      
+      final nextLayer = task.layer < 10 ? task.layer + 1 : 10;
       _populateFallbackQueue(userId, nextLayer);
       if (_layer1Queue.isNotEmpty) {
         _showLayer1Task(_layer1Queue.first);
@@ -293,9 +303,32 @@ class DeepeningController extends StateNotifier<DeepeningState> {
 
   void _populateFallbackQueue(String userId, int layer) {
     _layer1Queue.clear();
-    final count = layer == 1 ? 30 : 10;
-    for (int i = 1; i <= count; i++) {
-      _layer1Queue.add(_generateFallbackTask(userId, layer, taskIndex: i));
+    final sectors = [
+      'pattern_recognition',
+      'spatial_reasoning',
+      'sequencing_ordering',
+      'working_memory',
+      'numeric_reasoning',
+      'categorization',
+      'visual_anomaly_detection',
+      'auditory_processing',
+      'verbal_language',
+      'motor_precision',
+    ];
+
+    if (layer == 1) {
+      // 3 questions for each of the 10 sectors = 30 total probes
+      for (final sector in sectors) {
+        for (int q = 1; q <= 3; q++) {
+          _layer1Queue.add(_generateSectorTask(userId, sector, layer, q));
+        }
+      }
+    } else {
+      // Surviving sector tasks for deepening layers
+      for (int i = 1; i <= 6; i++) {
+        final sec = sectors[(i - 1) % sectors.length];
+        _layer1Queue.add(_generateSectorTask(userId, sec, layer, i));
+      }
     }
   }
 
@@ -306,88 +339,68 @@ class DeepeningController extends StateNotifier<DeepeningState> {
     return '${hex(8)}-${hex(4)}-4${hex(3)}-$variant${hex(3)}-${hex(12)}';
   }
 
-  DeepeningTaskPayload _generateFallbackTask(String userId, int layer) {
-    final verticals = [
-      'calendar_genius',
-      'constellation_mapper',
-      'discovery',
-      'visual_pattern_explorer',
-      'sequence_navigator',
-      'spatial_builder',
-      'memory_weaver',
-      'language_patterner',
-      'number_navigator',
-      'logic_lens',
-    ];
-    // Randomize selection per layer and session seed so baseline discovery is unpredictable
-    final seed = ((state.sessionId?.hashCode ?? userId.hashCode) + layer * 31).abs();
-    final verticalId = verticals[seed % verticals.length];
+  DeepeningTaskPayload _generateSectorTask(String userId, String sectorId, int layer, int index) {
     final skins = ['cosmic_space', 'sage_green', 'pastel_dinosaur', 'terracotta_train'];
-    final skin = skins[seed % skins.length];
-
+    final skin = skins[(sectorId.hashCode + layer * 7 + index) % skins.length];
     final totalQuestions = layer == 1 ? 30 : 10;
 
-    switch (verticalId) {
-      case 'calendar_genius':
+    switch (sectorId) {
+      case 'pattern_recognition':
         return DeepeningTaskPayload(
-          taskId: 'fallback_cal_${layer}_$seed', userId: userId, layer: layer, totalLayers: totalQuestions, verticalId: 'calendar_genius', themeSkin: skin,
-          prompt: 'Find the day of the week for July 20, 2026.', taskData: {'target_date': '2026-07-20'},
+          taskId: 'fallback_${sectorId}_${layer}_$index', userId: userId, layer: layer, totalLayers: totalQuestions, verticalId: sectorId, sectorId: sectorId, themeSkin: skin,
+          prompt: 'Which icon completes the visual sequence?', taskData: {'options': ['🔷', '⭐', '🔴', '🟢']},
         );
-      case 'constellation_mapper':
+      case 'spatial_reasoning':
         return DeepeningTaskPayload(
-          taskId: 'fallback_const_${layer}_$seed', userId: userId, layer: layer, totalLayers: totalQuestions, verticalId: 'constellation_mapper', themeSkin: skin,
-          prompt: 'Select four stars that belong to the same pattern.', taskData: {'required_stars': 4, 'total_star_nodes': 6},
+          taskId: 'fallback_${sectorId}_${layer}_$index', userId: userId, layer: layer, totalLayers: totalQuestions, verticalId: sectorId, sectorId: sectorId, themeSkin: skin,
+          prompt: 'Which shape matches the rotated pattern?', taskData: {'options': ['Shape 0°', 'Shape 90°', 'Shape 180°', 'Shape Mirror']},
         );
-      case 'discovery':
+      case 'sequencing_ordering':
         return DeepeningTaskPayload(
-          taskId: 'fallback_disc_${layer}_$seed', userId: userId, layer: layer, totalLayers: totalQuestions, verticalId: 'discovery', themeSkin: skin,
-          prompt: 'Which path on the map leads to the hidden treasure emblem?',
-          taskData: {'options': ['Northern Pass', 'Crystal Cave', 'Sunset Valley', 'Echo River']},
+          taskId: 'fallback_${sectorId}_${layer}_$index', userId: userId, layer: layer, totalLayers: totalQuestions, verticalId: sectorId, sectorId: sectorId, themeSkin: skin,
+          prompt: 'Select the item that comes next in order.', taskData: {'options': ['First', 'Second', 'Third', 'Fourth']},
         );
-      case 'visual_pattern_explorer':
+      case 'working_memory':
         return DeepeningTaskPayload(
-          taskId: 'fallback_vis_${layer}_$seed', userId: userId, layer: layer, totalLayers: totalQuestions, verticalId: 'visual_pattern_explorer', themeSkin: skin,
-          prompt: 'Identify the tile pattern that completes the symmetrical sequence.',
-          taskData: {'options': ['Pattern A (Rotated)', 'Pattern B (Mirrored)', 'Pattern C (Shifted)', 'Pattern D (Inverted)']},
+          taskId: 'fallback_${sectorId}_${layer}_$index', userId: userId, layer: layer, totalLayers: totalQuestions, verticalId: sectorId, sectorId: sectorId, themeSkin: skin,
+          prompt: 'Recall the highlighted icon from the brief flash.', taskData: {'options': ['🌟', '🎨', '🚀', '🧩']},
         );
-      case 'sequence_navigator':
+      case 'numeric_reasoning':
         return DeepeningTaskPayload(
-          taskId: 'fallback_seq_${layer}_$seed', userId: userId, layer: layer, totalLayers: totalQuestions, verticalId: 'sequence_navigator', themeSkin: skin,
-          prompt: 'Arrange the sequence order to keep the train schedule on time.',
-          taskData: {'options': ['Station 1 -> 2 -> 3', 'Station 2 -> 1 -> 3', 'Station 3 -> 2 -> 1']},
+          taskId: 'fallback_${sectorId}_${layer}_$index', userId: userId, layer: layer, totalLayers: totalQuestions, verticalId: sectorId, sectorId: sectorId, themeSkin: skin,
+          prompt: 'Count the elements and select the matching quantity.', taskData: {'options': ['3', '5', '7', '9']},
         );
-      case 'spatial_builder':
+      case 'categorization':
         return DeepeningTaskPayload(
-          taskId: 'fallback_spat_${layer}_$seed', userId: userId, layer: layer, totalLayers: totalQuestions, verticalId: 'spatial_builder', themeSkin: skin,
-          prompt: 'Which 3D shape fits into the designated slot without overlapping?',
-          taskData: {'options': ['Blue Prism', 'Green Pyramid', 'Red Cylinder', 'Yellow Cube']},
+          taskId: 'fallback_${sectorId}_${layer}_$index', userId: userId, layer: layer, totalLayers: totalQuestions, verticalId: sectorId, sectorId: sectorId, themeSkin: skin,
+          prompt: 'Which item belongs to the same rule group?', taskData: {'options': ['Group A', 'Group B', 'Group C', 'Group D']},
         );
-      case 'memory_weaver':
+      case 'visual_anomaly_detection':
         return DeepeningTaskPayload(
-          taskId: 'fallback_mem_${layer}_$seed', userId: userId, layer: layer, totalLayers: totalQuestions, verticalId: 'memory_weaver', themeSkin: skin,
-          prompt: 'Which item was shown first in the story sequence?',
-          taskData: {'options': ['Golden Key', 'Ancient Compass', 'Silver Lantern', 'Velvet Map']},
+          taskId: 'fallback_${sectorId}_${layer}_$index', userId: userId, layer: layer, totalLayers: totalQuestions, verticalId: sectorId, sectorId: sectorId, themeSkin: skin,
+          prompt: 'Identify the displaced or altered element.', taskData: {'options': ['Normal A', 'Normal B', 'Altered C', 'Normal D']},
         );
-      case 'language_patterner':
+      case 'auditory_processing':
         return DeepeningTaskPayload(
-          taskId: 'fallback_lang_${layer}_$seed', userId: userId, layer: layer, totalLayers: totalQuestions, verticalId: 'language_patterner', themeSkin: skin,
-          prompt: 'Find the word that follows the repeating rhyming pattern.',
-          taskData: {'options': ['Glow', 'Bright', 'Flow', 'Shine']},
+          taskId: 'fallback_${sectorId}_${layer}_$index', userId: userId, layer: layer, totalLayers: totalQuestions, verticalId: sectorId, sectorId: sectorId, themeSkin: skin,
+          prompt: 'Listen or match the rhythmic sound cue to the icon.', taskData: {'options': ['Tone High', 'Tone Mid', 'Tone Low', 'Rhythm Pulse']},
         );
-      case 'number_navigator':
+      case 'verbal_language':
         return DeepeningTaskPayload(
-          taskId: 'fallback_num_${layer}_$seed', userId: userId, layer: layer, totalLayers: totalQuestions, verticalId: 'number_navigator', themeSkin: skin,
-          prompt: 'Identify the missing number in the step progression: 3, 6, 9, ?, 15.',
-          taskData: {'options': ['11', '12', '13', '14']},
+          taskId: 'fallback_${sectorId}_${layer}_$index', userId: userId, layer: layer, totalLayers: totalQuestions, verticalId: sectorId, sectorId: sectorId, themeSkin: skin,
+          prompt: 'Match the paired icon analogy.', taskData: {'options': ['Sun -> Light', 'Cloud -> Rain', 'Tree -> Leaf', 'Star -> Night']},
         );
-      case 'logic_lens':
+      case 'motor_precision':
       default:
         return DeepeningTaskPayload(
-          taskId: 'fallback_logic_${layer}_$seed', userId: userId, layer: layer, totalLayers: totalQuestions, verticalId: 'logic_lens', themeSkin: skin,
-          prompt: 'If shape A is larger than B, and B is larger than C, which shape is smallest?',
-          taskData: {'options': ['Shape A', 'Shape B', 'Shape C']},
+          taskId: 'fallback_${sectorId}_${layer}_$index', userId: userId, layer: layer, totalLayers: totalQuestions, verticalId: sectorId, sectorId: sectorId, themeSkin: skin,
+          prompt: 'Tap and trace the marker with steady motion.', taskData: {'options': ['Path Alpha', 'Path Beta', 'Path Gamma', 'Path Delta']},
         );
     }
+  }
+
+  DeepeningTaskPayload _generateFallbackTask(String userId, int layer) {
+    return _generateSectorTask(userId, 'pattern_recognition', layer, 1);
   }
 }
 

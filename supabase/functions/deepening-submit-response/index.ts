@@ -15,6 +15,7 @@ import {
 } from "../_shared/validate.ts";
 import {
   compositeScore,
+  computeTrackAffinity,
   evaluateAnswer,
   type LayerScore,
   modalityForExecution,
@@ -22,8 +23,12 @@ import {
   reEvaluatePath,
   requiredExecutions,
   scoreResponse,
+  SECTORS,
+  type SectorId,
   type SourceType,
   supportTransition,
+  survivingSectorsForLayer,
+  TrackId,
   type VerticalId,
   VERTICALS,
 } from "../_shared/engine2.ts";
@@ -77,41 +82,28 @@ async function createDeepeningProfile(
   svc: ReturnType<typeof import("../_shared/auth.ts").buildServiceClient>,
   sessionId: string,
   childId: string,
-  verticalId: string,
+  winningTrack: string,
+  state: Record<string, unknown>,
 ): Promise<Record<string, unknown>> {
   const [
     executionsResult,
-    stateResult,
-    handoffResult,
     supportResult,
     consistencyResult,
   ] = await Promise.all([
-    svc.from("layer_task_execution").select("*").eq("session_id", sessionId).eq(
-      "vertical_id",
-      verticalId,
-    ).order("layer_number", { ascending: true }).order("execution_index", {
+    svc.from("layer_task_execution").select("*").eq("session_id", sessionId).order("layer_number", { ascending: true }).order("execution_index", {
       ascending: true,
     }),
-    svc.from("layer_progression_state").select(
-      "path_type, path_history, completed_layers, support_level",
-    ).eq("session_id", sessionId).eq("vertical_id", verticalId).maybeSingle(),
-    svc.from("stage2_handoffs").select(
-      "isolation_score, accuracy, recovery, engagement, speed, telemetry_reference",
-    ).eq("session_id", sessionId).eq("vertical_id", verticalId).maybeSingle(),
     svc.from("support_ladder_log").select(
       "support_level, trigger_reason, outcome, created_at",
-    ).eq("session_id", sessionId).eq("vertical_id", verticalId).order(
-      "created_at",
-    ),
+    ).eq("session_id", sessionId).order("created_at"),
     svc.from("consistency_window").select(
       "window_index, accuracy_stability_score, fatigue_score",
-    ).eq("session_id", sessionId).eq("vertical_id", verticalId).order(
-      "window_index",
-    ),
+    ).eq("session_id", sessionId).order("window_index"),
   ]);
+
   const rows = (executionsResult.data ?? []) as Record<string, unknown>[];
   const layerScores: Record<string, unknown> = {};
-  for (let layer = 2; layer <= 10; layer++) {
+  for (let layer = 1; layer <= 10; layer++) {
     const layerRows = rows.filter((row) => Number(row.layer_number) === layer);
     if (!layerRows.length) continue;
     const score = toLayerScore(layerRows);
@@ -119,31 +111,25 @@ async function createDeepeningProfile(
       ...score,
       composite_score: compositeScore(score),
       executions: layerRows.length,
-      metric_values: layerRows.map((row) => row.metric_values),
     };
   }
+
   const supportEvents = (supportResult.data ?? []) as Record<string, unknown>[];
   const consistencyWindows = consistencyResult.data ?? [];
   const layerSeven = rows.filter((row) => Number(row.layer_number) === 7);
+
   const profile = {
-    vertical_id: verticalId,
-    layer1_isolation: handoffResult.data
-      ? {
-        isolation_score: Number(handoffResult.data.isolation_score),
-        components: {
-          accuracy: Number(handoffResult.data.accuracy),
-          recovery: Number(handoffResult.data.recovery),
-          engagement: Number(handoffResult.data.engagement),
-          speed: Number(handoffResult.data.speed),
-        },
-      }
-      : null,
+    winning_track: winningTrack,
+    vertical_id: winningTrack,
+    sector_scores: state.sector_scores ?? {},
+    track_affinity_final: state.track_affinity ?? {},
+    elimination_trail: state.elimination_trail ?? [],
+    decider_required: state.decider_required ?? false,
     layer_scores: layerScores,
-    path_history: stateResult.data?.path_history ?? [],
-    final_path: stateResult.data?.path_type ?? null,
-    completed_layers: stateResult.data?.completed_layers ?? [],
+    path_history: state.path_history ?? [],
+    completed_layers: state.completed_layers ?? [],
     support_ladder: {
-      final_level: Number(stateResult.data?.support_level ?? 0),
+      final_level: Number(state.support_level ?? 0),
       transitions: supportEvents,
       average_level: average(rows.map((row) => Number(row.support_level))),
     },
@@ -163,15 +149,17 @@ async function createDeepeningProfile(
       ? compositeScore(toLayerScore(layerSeven))
       : null,
     consistency: consistencyWindows,
-    telemetry_reference: `deepening:${sessionId}:${verticalId}`,
+    telemetry_reference: `deepening:${sessionId}:${winningTrack}`,
   };
+
   const record = {
     session_id: sessionId,
     child_id: childId,
-    vertical_id: verticalId,
+    vertical_id: winningTrack,
     profile,
     telemetry_reference: profile.telemetry_reference,
   };
+
   const [profileWrite, handoffWrite] = await Promise.all([
     svc.from("deepening_profiles").upsert(record, {
       onConflict: "session_id,vertical_id",
@@ -179,12 +167,14 @@ async function createDeepeningProfile(
     svc.from("stage3_handoffs").upsert({
       session_id: sessionId,
       child_id: childId,
-      vertical_id: verticalId,
+      vertical_id: winningTrack,
       deepening_profile: profile,
       telemetry_reference: profile.telemetry_reference,
     }, { onConflict: "session_id,vertical_id" }),
   ]);
+
   if (profileWrite.error || handoffWrite.error) {
+    console.error("[createDeepeningProfile] write error:", profileWrite.error?.message, handoffWrite.error?.message);
     throw new Error("Deepening profile could not be saved.");
   }
   return profile;
@@ -240,15 +230,11 @@ Deno.serve(async (req: Request): Promise<Response> => {
       body.response_id === undefined || body.response_id === null
         ? null
         : requireUuid(body.response_id, "response_id");
-    const verticalId = body.vertical_id ?? body.verticalId;
-    if (
-      typeof verticalId !== "string" ||
-      !VERTICALS.includes(verticalId as VerticalId)
-    ) {
-      throw new ValidationError("vertical_id is required.");
-    }
+    const verticalId = (body.vertical_id ?? body.verticalId ?? "pattern_recognition") as VerticalId;
+
     await requireOwnership(db, guardianId, childId);
     await requireActiveConsent(db, guardianId);
+
     const { data: session } = await svc.from("layer1_sessions")
       .select("status, expires_at").eq("id", sessionId).eq("child_id", childId)
       .maybeSingle();
@@ -258,27 +244,25 @@ Deno.serve(async (req: Request): Promise<Response> => {
     ) {
       return conflict("The deepening session is no longer active.");
     }
+
     const { data: state } = await svc.from("layer_progression_state").select(
       "*",
     )
-      .eq("session_id", sessionId).eq("child_id", childId).eq(
-        "vertical_id",
-        verticalId,
-      ).maybeSingle();
+      .eq("session_id", sessionId).eq("child_id", childId)
+      .maybeSingle();
+
     if (!state || state.status !== "in_progress") {
-      return conflict("This vertical is not active.");
+      return conflict("This session state is not active.");
     }
+
     const { data: task } = await svc.from("vertical_task_bank").select("*")
-      .eq("id", taskId).eq("session_id", sessionId).eq("child_id", childId).eq(
-        "vertical_id",
-        verticalId,
-      ).maybeSingle();
-    if (
-      !task || task.id !== state.current_task_id ||
-      Number(task.layer_number) !== Number(state.current_layer)
-    ) {
-      return conflict("This task is not active for the vertical.");
+      .eq("id", taskId).eq("session_id", sessionId).eq("child_id", childId)
+      .maybeSingle();
+
+    if (!task) {
+      return conflict("This task is not active.");
     }
+
     if (responseId) {
       const { data: replay } = await svc.from("layer_task_execution").select(
         "task_id",
@@ -286,9 +270,6 @@ Deno.serve(async (req: Request): Promise<Response> => {
         .eq("session_id", sessionId).eq("response_id", responseId)
         .maybeSingle();
       if (replay) {
-        if (replay.task_id !== taskId) {
-          return conflict("response_id has already been used.");
-        }
         return ok({
           session_id: sessionId,
           vertical_id: verticalId,
@@ -298,18 +279,8 @@ Deno.serve(async (req: Request): Promise<Response> => {
       }
     }
 
-    const { data: priorRows, error: priorError } = await svc.from(
-      "layer_task_execution",
-    ).select("*")
-      .eq("session_id", sessionId).eq("task_id", taskId).order(
-        "execution_index",
-      );
-    if (priorError) throw new Error("Task attempts could not be read.");
-    const required = requiredExecutions(Number(task.layer_number));
-    const executionIndex = (priorRows?.length ?? 0) + 1;
-    if (executionIndex > required) {
-      return conflict("All required presentations for this task are complete.");
-    }
+    const currentLayer = Number(task.layer_number);
+    const required = requiredExecutions(currentLayer);
 
     const timing = (body.timing ?? {}) as Record<string, unknown>;
     const behavior = (body.behavior ?? {}) as Record<string, unknown>;
@@ -338,45 +309,19 @@ Deno.serve(async (req: Request): Promise<Response> => {
       skipped,
       task.source_type as SourceType,
     );
-    const fullPayload = task.item_payload as Record<string, unknown>;
-    const publicPayload = (fullPayload.public_payload ?? {}) as Record<
-      string,
-      unknown
-    >;
-    const protocol = (publicPayload.layer_protocol ?? {}) as Record<
-      string,
-      unknown
-    >;
-    const modality = modalityForExecution(
-      Number(task.layer_number),
-      executionIndex,
-    );
-    const metricValues = {
-      objective: publicPayload.objective ?? null,
-      instrumentation_only: publicPayload.instrumentation_only === true,
-      strategy_shifts: Math.max(
-        0,
-        Math.floor(numberField(behavior.strategy_shifts, "strategy_shifts")),
-      ),
-      execution_index: executionIndex,
-      required_executions: required,
-      timing_budget_ms: Array.isArray(protocol.timing_budgets_ms)
-        ? protocol.timing_budgets_ms[executionIndex - 1] ?? null
-        : null,
-      modality,
-    };
+
     const storedResponse = boundedResponse(response);
     const insertPayload: Record<string, unknown> = {
       task_id: taskId,
       session_id: sessionId,
       child_id: childId,
       vertical_id: verticalId,
-      layer_number: task.layer_number,
-      source_type: task.source_type,
-      modality,
+      layer_number: currentLayer,
+      source_type: task.sourceType ?? "created",
+      modality: task.modality ?? "visual",
       support_level: Number(state.support_level),
-      execution_index: executionIndex,
-      presentation_metadata: { modality, execution_index: executionIndex },
+      execution_index: 1,
+      presentation_metadata: { modality: task.modality ?? "visual" },
       accuracy: scored.accuracy,
       latency_ms: scored.latencyMs,
       recovery: scored.recovery,
@@ -388,15 +333,19 @@ Deno.serve(async (req: Request): Promise<Response> => {
         Math.floor(numberField(behavior.answer_changes, "answer_changes")),
       ),
       skipped,
-      metric_values: metricValues,
+      metric_values: { score: scored.isolationScore },
       response: typeof storedResponse === "object" && storedResponse !== null
         ? storedResponse
         : { value: storedResponse },
     };
+
     if (responseId) insertPayload.response_id = responseId;
     const { error: insertError } = await svc.from("layer_task_execution")
       .insert(insertPayload);
-    if (insertError) return internalError("Response could not be recorded.");
+    if (insertError) {
+      console.error("[deepening-submit-response] insertError:", insertError.message);
+      return internalError("Response could not be recorded.");
+    }
 
     const transition = supportTransition(Number(state.support_level), {
       accuracy: scored.accuracy,
@@ -405,121 +354,106 @@ Deno.serve(async (req: Request): Promise<Response> => {
       skipped,
       path: state.path_type as "accelerated" | "standard" | "supported",
     });
-    if (transition.reason && transition.outcome) {
-      const { error: supportError } = await svc.from("support_ladder_log")
-        .insert({
-          session_id: sessionId,
-          task_id: taskId,
-          child_id: childId,
-          vertical_id: verticalId,
-          support_level: transition.level,
-          trigger_reason: transition.reason,
-          outcome: transition.outcome,
-        });
-      if (supportError) {
-        throw new Error("Support ladder transition could not be saved.");
-      }
-    } else if (skipped && Number(state.support_level) === 5) {
-      await svc.from("support_ladder_log").insert({
-        session_id: sessionId,
-        task_id: taskId,
-        child_id: childId,
-        vertical_id: verticalId,
-        support_level: 5,
-        trigger_reason: "support ladder exhausted before response",
-        outcome: "abandoned",
-      });
-    }
 
-    const allRows = [...((priorRows ?? []) as Record<string, unknown>[]), {
-      accuracy: scored.accuracy,
-      recovery: scored.recovery,
-      engagement: scored.engagement,
-      latency_ms: scored.latencyMs,
-    }];
-    const layerComplete = allRows.length >= required;
-    let verticalComplete = false;
+    // Update sector scores if this was a sector probe
+    const sectorScores: Record<string, number> = {
+      ...(state.sector_scores as Record<string, number> ?? {}),
+    };
+    if (SECTORS.includes(verticalId as SectorId)) {
+      sectorScores[verticalId] = scored.isolationScore;
+    }
+    const updatedAffinity = computeTrackAffinity(sectorScores);
+
+    // Check layer completion
+    const { data: layerExecutions } = await svc.from("layer_task_execution")
+      .select("id, vertical_id, accuracy")
+      .eq("session_id", sessionId)
+      .eq("layer_number", currentLayer);
+
+    const layerComplete = (layerExecutions?.length ?? 0) >= required || (currentLayer >= 2 && (layerExecutions?.length ?? 0) >= (state.active_sectors?.length ?? 1));
+
+    let funnelComplete = false;
+    let winningTrack: TrackId | null = null;
+
     if (layerComplete) {
-      const { data: handoff } = await svc.from("stage2_handoffs")
-        .select("isolation_score, recovery").eq("session_id", sessionId).eq(
-          "vertical_id",
-          verticalId,
-        ).maybeSingle();
-      if (!handoff) throw new Error("Layer 1 handoff could not be read.");
-      if (Number(task.layer_number) === 9) {
+      if (currentLayer === 9) {
         await saveConsistencyWindow(
           svc,
           sessionId,
           childId,
           verticalId,
-          allRows,
+          (layerExecutions ?? []) as Record<string, unknown>[],
         );
       }
-      const latestScore = toLayerScore(allRows);
-      const reroute = reEvaluatePath({
-        isolationScore: Number(handoff.isolation_score),
-        recovery: Number(handoff.recovery),
-      }, latestScore);
-      const completed = new Set<number>(
-        Array.isArray(state.completed_layers)
-          ? state.completed_layers.map((value: unknown) => Number(value))
-          : [],
-      );
-      completed.add(Number(task.layer_number));
-      const nextLayers = pathLayers(reroute.path);
-      const nextLayer = nextLayers.find((layer) =>
-        layer > Number(task.layer_number) && !completed.has(layer)
-      );
-      const history = Array.isArray(state.path_history)
-        ? state.path_history
-        : [];
-      history.push({
-        layer: Number(task.layer_number),
-        path: reroute.path,
-        previous_path: state.path_type,
-        routing_signal: reroute.routingSignal,
-        reason: reroute.reason,
-        created_at: new Date().toISOString(),
-      });
-      verticalComplete = nextLayer === undefined;
-      const { error: stateWriteError } = await svc.from(
-        "layer_progression_state",
-      ).update({
-        current_layer: verticalComplete ? Number(task.layer_number) : nextLayer,
-        path_type: reroute.path,
-        path_layers: nextLayers,
-        path_history: history,
-        completed_layers: [...completed].sort((a, b) => a - b),
-        support_level: transition.level,
-        current_task_id: null,
-        status: verticalComplete ? "funnel_complete" : "in_progress",
-        updated_at: new Date().toISOString(),
-      }).eq("id", state.id);
-      if (stateWriteError) {
-        throw new Error("Deepening progression could not be updated.");
-      }
-      if (verticalComplete) {
-        await createDeepeningProfile(svc, sessionId, childId, verticalId);
-      }
-    } else {
-      const { error: stateWriteError } = await svc.from(
-        "layer_progression_state",
-      ).update({
-        support_level: transition.level,
-        updated_at: new Date().toISOString(),
-      }).eq("id", state.id);
-      if (stateWriteError) {
-        throw new Error("Support state could not be updated.");
+
+      if (currentLayer >= 10) {
+        // Resolve Layer 10 Decision
+        funnelComplete = true;
+        if (state.decider_required) {
+          // Compare decider performance between side-by-side tracks
+          const calExec = layerExecutions?.find((row) => row.vertical_id === "calendar_genius");
+          const constExec = layerExecutions?.find((row) => row.vertical_id === "constellation_mapper");
+
+          const calAcc = Number(calExec?.accuracy ?? 0);
+          const constAcc = Number(constExec?.accuracy ?? 0);
+          winningTrack = calAcc >= constAcc ? "calendar_genius" : "constellation_mapper";
+        } else {
+          winningTrack = updatedAffinity.leader;
+        }
+
+        const completed = [...(state.completed_layers ?? []), currentLayer];
+        await svc.from("layer_progression_state").update({
+          status: "funnel_complete",
+          completed_layers: completed,
+          winning_track: winningTrack,
+          sector_scores: sectorScores,
+          track_affinity: updatedAffinity,
+          updated_at: new Date().toISOString(),
+        }).eq("id", state.id);
+
+        // Hand off Stage 3 Deepening Profile with full elimination trail to Engine 3
+        await createDeepeningProfile(svc, sessionId, childId, winningTrack, {
+          ...state,
+          winning_track: winningTrack,
+          sector_scores: sectorScores,
+          track_affinity: updatedAffinity,
+        });
+      } else {
+        // Advance layer and apply sector elimination schedule
+        const nextLayer = currentLayer + 1;
+        const currentActive = (state.active_sectors ?? [...SECTORS]) as SectorId[];
+        const rankedCurrent = [...currentActive].sort(
+          (a, b) => (sectorScores[b] ?? 0) - (sectorScores[a] ?? 0),
+        );
+
+        const nextSurviving = survivingSectorsForLayer(nextLayer, rankedCurrent);
+        const droppedSectors = currentActive.filter((sec) => !nextSurviving.includes(sec));
+
+        const eliminationTrail = Array.isArray(state.elimination_trail)
+          ? [...state.elimination_trail]
+          : [];
+        eliminationTrail.push({
+          layer: nextLayer,
+          surviving: nextSurviving.length,
+          active_sectors: nextSurviving,
+          dropped_sectors: droppedSectors,
+          track_affinity: updatedAffinity,
+        });
+
+        const completed = [...(state.completed_layers ?? []), currentLayer];
+        await svc.from("layer_progression_state").update({
+          current_layer: nextLayer,
+          active_sectors: nextSurviving,
+          sector_scores: sectorScores,
+          track_affinity: updatedAffinity,
+          elimination_trail: eliminationTrail,
+          completed_layers: completed,
+          support_level: transition.level,
+          updated_at: new Date().toISOString(),
+        }).eq("id", state.id);
       }
     }
 
-    const { count: remaining } = await svc.from("layer_progression_state")
-      .select("id", { count: "exact", head: true })
-      .eq("session_id", sessionId).eq("child_id", childId).eq(
-        "status",
-        "in_progress",
-      );
-    const funnelComplete = (remaining ?? 0) === 0;
     await writeAudit({
       action: "engine2.deepening_response_recorded",
       guardianId,
@@ -527,20 +461,20 @@ Deno.serve(async (req: Request): Promise<Response> => {
       meta: {
         session_id: sessionId,
         vertical_id: verticalId,
-        layer: task.layer_number,
-        execution_index: executionIndex,
+        layer: currentLayer,
         layer_complete: layerComplete,
+        funnel_complete: funnelComplete,
+        winning_track: winningTrack,
       },
     });
+
     return ok({
       session_id: sessionId,
       vertical_id: verticalId,
       layer_complete: layerComplete,
-      vertical_complete: verticalComplete,
       funnel_complete: funnelComplete,
+      winning_track: winningTrack,
       support_level: transition.level,
-      required_executions: required,
-      execution_index: executionIndex,
     }, 201);
   } catch (error) {
     if (error instanceof ValidationError) return badRequest(error.message);

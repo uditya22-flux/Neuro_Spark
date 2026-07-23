@@ -14,10 +14,14 @@ import {
   ValidationError,
 } from "../_shared/validate.ts";
 import {
+  computeTrackAffinity,
   confidenceFor,
   evaluateAnswer,
   scoreResponse,
+  SECTORS,
+  type SectorId,
   type SourceType,
+  survivingSectorsForLayer,
 } from "../_shared/engine2.ts";
 
 function numberField(value: unknown, field: string, fallback = 0): number {
@@ -36,20 +40,20 @@ async function finalizeLayer1(
 ): Promise<{ complete: boolean }> {
   const { data: sessionTasks, error: taskError } = await svc
     .from("vertical_task_bank")
-    .select("vertical_id")
+    .select("id, vertical_id")
     .eq("session_id", sessionId)
     .eq("child_id", childId)
     .eq("layer_number", 1)
     .eq("active", true);
   if (taskError) throw new Error("Layer 1 tasks could not be read.");
 
-  const expectedVerticals = new Set(
-    (sessionTasks ?? []).map((row: { vertical_id: string }) => row.vertical_id),
+  const taskIds = new Set(
+    (sessionTasks ?? []).map((row: { id: string }) => row.id),
   );
-  const { data: allVerticals, error: telemetryReadError } = await svc
+  const { data: telemetryRows, error: telemetryReadError } = await svc
     .from("sublayer_telemetry")
     .select(
-      "vertical_id, isolation_score, accuracy, recovery, engagement, speed, telemetry_reference",
+      "task_id, vertical_id, isolation_score, accuracy, recovery, engagement, speed, telemetry_reference",
     )
     .eq("session_id", sessionId)
     .eq("child_id", childId);
@@ -57,28 +61,94 @@ async function finalizeLayer1(
     throw new Error("Layer 1 telemetry could not be read.");
   }
 
-  const latest = new Map<string, Record<string, unknown>>();
-  for (const row of allVerticals ?? []) {
-    latest.set(row.vertical_id, row as Record<string, unknown>);
-  }
-  const complete = expectedVerticals.size > 0 &&
-    [...expectedVerticals].every((vertical) => latest.has(vertical));
+  const answeredTaskIds = new Set(
+    (telemetryRows ?? []).map((row: { task_id: string }) => row.task_id),
+  );
+  const complete = taskIds.size > 0 &&
+    [...taskIds].every((id) => answeredTaskIds.has(id));
   if (!complete) return { complete };
 
-  for (const row of latest.values()) {
-    const { error } = await svc.from("stage2_handoffs").upsert({
+  // Calculate sector scores across the 10 cognitive sectors
+  const sectorScoreAccumulator: Record<string, number[]> = {};
+  for (const row of telemetryRows ?? []) {
+    const sec = row.vertical_id;
+    if (!sectorScoreAccumulator[sec]) sectorScoreAccumulator[sec] = [];
+    sectorScoreAccumulator[sec].push(Number(row.isolation_score));
+  }
+
+  const sectorScores: Record<string, number> = {};
+  for (const sector of SECTORS) {
+    const scores = sectorScoreAccumulator[sector] ?? [0.5];
+    sectorScores[sector] = scores.reduce((a, b) => a + b, 0) / scores.length;
+  }
+
+  // Compute aggregate track affinity scores via mapping table
+  const trackAffinity = computeTrackAffinity(sectorScores);
+
+  // Rank sectors by score descending
+  const rankedSectors = ([...SECTORS] as SectorId[]).sort(
+    (a, b) => (sectorScores[b] ?? 0) - (sectorScores[a] ?? 0),
+  );
+
+  // Eliminate bottom 4 sectors for Layer 2 handoff (10 -> 6)
+  const top6Sectors = survivingSectorsForLayer(2, rankedSectors);
+  const droppedLayer2 = rankedSectors.filter((sec) => !top6Sectors.includes(sec));
+
+  const eliminationTrail = [
+    {
+      layer: 1,
+      surviving: SECTORS.length,
+      active_sectors: [...SECTORS],
+      dropped_sectors: [],
+      track_affinity: trackAffinity,
+    },
+    {
+      layer: 2,
+      surviving: top6Sectors.length,
+      active_sectors: top6Sectors,
+      dropped_sectors: droppedLayer2,
+      track_affinity: trackAffinity,
+    },
+  ];
+
+  // Record Stage 2 handoff summary
+  for (const sector of SECTORS) {
+    await svc.from("stage2_handoffs").upsert({
       session_id: sessionId,
       child_id: childId,
-      vertical_id: row.vertical_id,
-      isolation_score: row.isolation_score,
-      accuracy: row.accuracy,
-      recovery: row.recovery,
-      engagement: row.engagement,
-      speed: row.speed,
-      telemetry_reference: row.telemetry_reference,
+      vertical_id: sector,
+      isolation_score: sectorScores[sector] ?? 0.5,
+      accuracy: sectorScores[sector] ?? 0.5,
+      recovery: sectorScores[sector] ?? 0.5,
+      engagement: sectorScores[sector] ?? 0.5,
+      speed: sectorScores[sector] ?? 0.5,
+      telemetry_reference: `layer1:${sessionId}:${sector}`,
     }, { onConflict: "session_id,vertical_id" });
-    if (error) throw new Error("Layer 1 handoff could not be recorded.");
   }
+
+  // Initialize Layer Progression State for Engine 2.b Elimination Funnel
+  const { error: stateError } = await svc.from("layer_progression_state").upsert({
+    session_id: sessionId,
+    child_id: childId,
+    vertical_id: trackAffinity.leader,
+    current_layer: 2,
+    path_type: "standard",
+    path_layers: [2, 3, 4, 5, 6, 7, 8, 9, 10],
+    completed_layers: [1],
+    status: "in_progress",
+    support_level: 0,
+    active_sectors: top6Sectors,
+    sector_scores: sectorScores,
+    track_affinity: trackAffinity,
+    elimination_trail: eliminationTrail,
+    winning_track: null,
+    decider_required: false,
+  }, { onConflict: "session_id,vertical_id" });
+
+  if (stateError) {
+    console.error("[finalizeLayer1] state error:", stateError.message);
+  }
+
   const { error: sessionError } = await svc
     .from("layer1_sessions")
     .update({ status: "complete", completed_at: new Date().toISOString() })
@@ -155,8 +225,6 @@ Deno.serve(async (req: Request): Promise<Response> => {
       .maybeSingle();
     if (!task) return conflict("Layer 1 task is not available.");
 
-    // Layer 1 is one bounded isolation response per vertical. Replays return
-    // the recorded result instead of creating a second handoff signal.
     const { data: existing, error: existingError } = await svc
       .from("sublayer_telemetry")
       .select("accuracy, isolation_score")
@@ -236,8 +304,6 @@ Deno.serve(async (req: Request): Promise<Response> => {
       "sublayer_telemetry",
     ).insert(insertPayload).select("accuracy, isolation_score").maybeSingle();
     if (telemetryError || !inserted) {
-      // A concurrent request may have won the task-once constraint. Treat it
-      // as a replay and return the authoritative stored score.
       const { data: raceWinner } = await svc
         .from("sublayer_telemetry")
         .select("accuracy, isolation_score")

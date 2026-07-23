@@ -127,14 +127,14 @@ class _CalendarGeniusSandboxState extends ConsumerState<CalendarGeniusSandbox> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Calendar Genius Sandbox',
+                      'Timeline workshop',
                       style: theme.textTheme.titleMedium?.copyWith(
                         fontWeight: FontWeight.bold,
                       ),
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      'Drag and slide timeline blocks into chronological order',
+                      'Drag the story blocks into an order that feels right',
                       style: theme.textTheme.bodySmall?.copyWith(
                         color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
                       ),
@@ -157,7 +157,7 @@ class _CalendarGeniusSandboxState extends ConsumerState<CalendarGeniusSandbox> {
                         const Icon(Icons.check_circle_rounded, size: 64, color: Color(0xFFFF9F1C)),
                         const SizedBox(height: 12),
                         Text(
-                          'Timeline Synchronized!',
+                          'The timeline is flowing!',
                           style: theme.textTheme.titleLarge?.copyWith(
                             fontWeight: FontWeight.bold,
                             color: const Color(0xFFFF9F1C),
@@ -165,7 +165,7 @@ class _CalendarGeniusSandboxState extends ConsumerState<CalendarGeniusSandbox> {
                         ),
                         const SizedBox(height: 6),
                         Text(
-                          'Loading next timeline pattern...',
+                          'A new story is arriving...',
                           style: theme.textTheme.bodyMedium?.copyWith(
                             color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
                           ),

@@ -16,15 +16,18 @@ class SupabaseApi {
   Future<Map<String, dynamic>> submitIntake(Map<String, dynamic> payload) async {
     final client = _client;
     if (client == null) {
-      debugPrint('[SupabaseApi] Client not initialized, operating in local fallback mode.');
-      return {'status': 'success', 'local': true};
+      throw StateError('Supabase is not initialized. Check flutter_app/.env.');
     }
     try {
       final response = await client.functions.invoke('submit-intake', body: payload);
-      return Map<String, dynamic>.from(response.data as Map? ?? {'status': 'success'});
+      final data = Map<String, dynamic>.from(response.data as Map? ?? const {});
+      if (response.status >= 400 || data.containsKey('error')) {
+        throw StateError(data['error'] as String? ?? 'Preferences could not be saved.');
+      }
+      return data;
     } catch (e) {
       debugPrint('[SupabaseApi] Error invoking submit-intake: $e');
-      return {'status': 'success', 'fallback': true};
+      throw StateError(_safeFunctionMessage(e, 'Preferences could not be saved.'));
     }
   }
 
@@ -32,24 +35,53 @@ class SupabaseApi {
   Future<Map<String, dynamic>> createChild({required String preferredName, required int birthYear}) async {
     final client = _client;
     if (client == null) {
-      return {
-        'id': 'local_child_${DateTime.now().millisecondsSinceEpoch}',
-        'preferredName': preferredName,
-      };
+      throw StateError('Supabase is not initialized. Check flutter_app/.env.');
     }
     try {
       final response = await client.functions.invoke('create-child', body: {
         'preferredName': preferredName,
         'birthYear': birthYear,
       });
-      return Map<String, dynamic>.from(response.data as Map);
+      final data = Map<String, dynamic>.from(response.data as Map? ?? const {});
+      if (response.status >= 400 || data.containsKey('error')) {
+        throw StateError(data['error'] as String? ?? 'Child profile could not be created.');
+      }
+      return data;
     } catch (e) {
       debugPrint('[SupabaseApi] Error creating child profile: $e');
-      return {
-        'id': 'fallback_child_${DateTime.now().millisecondsSinceEpoch}',
-        'preferredName': preferredName,
-      };
+      throw StateError(_safeFunctionMessage(e, 'Child profile could not be created.'));
     }
+  }
+
+  /// Lists only child records owned by the authenticated guardian (enforced by RLS).
+  Future<List<Map<String, dynamic>>> loadChildren() async {
+    final client = _client;
+    if (client == null) {
+      throw StateError('Supabase is not initialized. Check flutter_app/.env.');
+    }
+    final rows = await client
+        .from('children')
+        .select('id, preferred_name, birth_year')
+        .order('created_at');
+    return (rows as List<dynamic>)
+        .map((row) => Map<String, dynamic>.from(row as Map))
+        .toList();
+  }
+
+  /// Loads the latest structured preferences for an owned child record.
+  Future<Map<String, dynamic>?> loadExplorationPreferences(String childId) async {
+    final client = _client;
+    if (client == null) {
+      throw StateError('Supabase is not initialized. Check flutter_app/.env.');
+    }
+    final row = await client
+        .from('guardian_exploration_preferences')
+        .select('configuration')
+        .eq('child_id', childId)
+        .gt('expires_at', DateTime.now().toUtc().toIso8601String())
+        .maybeSingle();
+    if (row == null) return null;
+    return Map<String, dynamic>.from(row['configuration'] as Map);
   }
 
   /// Submits a sensory/regulation trigger event via the `trigger-event` Edge Function.
@@ -87,6 +119,21 @@ class SupabaseApi {
       debugPrint('[SupabaseApi] Privacy purge error: $e');
       return false;
     }
+  }
+
+  String _safeFunctionMessage(Object error, String fallback) {
+    if (error is StateError) return error.message.toString();
+    if (error is FunctionException) {
+      final dynamic exception = error;
+      final details = exception.details;
+      if (details is Map && details['error'] is String) {
+        return details['error'] as String;
+      }
+      if (details is String && details.isNotEmpty) return details;
+      final reason = exception.reason;
+      if (reason is String && reason.isNotEmpty) return reason;
+    }
+    return fallback;
   }
 }
 

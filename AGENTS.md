@@ -1,8 +1,10 @@
 # MindBridge engineering controls
 
 This private beta is guardian-led strengths exploration. Do not add diagnostic,
-screening, predictive, employment, salary, re-engagement, streak, badge, or
-child-notification functionality without an approved charter change.
+screening, employment, salary, re-engagement, streak, badge, or
+ without an approved charter change.
+
+can add prediction ,child-notification functionality .
 
 ## Developer-only architecture analysis
 

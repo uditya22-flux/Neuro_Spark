@@ -1,8 +1,28 @@
 import { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-// These are exploration domains, not diagnostic labels.  Engine 1 may enable
-// any subset, and Engine 2 must keep the domains independent all the way
-// through the deepening funnel.
+// Sector taxonomy (Engine 2.a generic cognitive probes)
+export const SECTORS = [
+  "pattern_recognition",
+  "spatial_reasoning",
+  "sequencing_ordering",
+  "working_memory",
+  "numeric_reasoning",
+  "categorization",
+  "visual_anomaly_detection",
+  "auditory_processing",
+  "verbal_language",
+  "motor_precision",
+] as const;
+export type SectorId = typeof SECTORS[number];
+
+// Production track targets
+export const TRACKS = [
+  "calendar_genius",
+  "constellation_mapper",
+] as const;
+export type TrackId = typeof TRACKS[number];
+
+// All valid domain identifiers across the engine
 export const VERTICALS = [
   "calendar_genius",
   "constellation_mapper",
@@ -14,8 +34,10 @@ export const VERTICALS = [
   "language_patterner",
   "number_navigator",
   "logic_lens",
+  ...SECTORS,
 ] as const;
 export type VerticalId = typeof VERTICALS[number];
+
 export type SourceType = "curated" | "predicted" | "created";
 export type PathType = "accelerated" | "standard" | "supported";
 export type Modality = "visual" | "audio" | "animated" | "interactive";
@@ -71,6 +93,14 @@ export interface LayerProtocol {
   instrumentationOnly: boolean;
   structureId: string;
   surfaceDomain: string | null;
+}
+
+export interface TrackAffinityResult {
+  calendar_genius: number;
+  constellation_mapper: number;
+  gap: number;
+  leader: TrackId;
+  isAmbiguous: boolean; // gap <= 0.15
 }
 
 const SOURCE_CONFIDENCE: Record<SourceType, number> = {
@@ -180,15 +210,22 @@ export function layerProtocol(
     language_patterner: "message-workshop",
     number_navigator: "market-route",
     logic_lens: "mystery-club",
+    pattern_recognition: "pattern-lab",
+    spatial_reasoning: "spatial-lab",
+    sequencing_ordering: "sequence-lab",
+    working_memory: "memory-lab",
+    numeric_reasoning: "number-lab",
+    categorization: "category-lab",
+    visual_anomaly_detection: "anomaly-lab",
+    auditory_processing: "audio-lab",
+    verbal_language: "verbal-lab",
+    motor_precision: "precision-lab",
   };
   return {
     requiredExecutions: required,
     modalities,
     timingBudgetsMs,
     instrumentationOnly: layer === 8,
-    // Layer 3 must always use a structure that did not appear in the two
-    // preceding layers for this vertical. The layer-qualified family makes
-    // that invariant explicit and auditable in the stored task payload.
     structureId: layer === 3
       ? `${verticalId}:novel-structure:v1`
       : `${verticalId}:core-structure:v${layer}`,
@@ -240,10 +277,6 @@ export function compositeScore(score: LayerScore): number {
   );
 }
 
-/**
- * Layer 1 remains the authoritative isolation signal. Later layers only add
- * fresh context for routing; they never overwrite or re-run that score.
- */
 export function reEvaluatePath(
   layer1: { isolationScore: number; recovery: number },
   latest: LayerScore,
@@ -313,8 +346,6 @@ export function scoreResponse(
     recovery,
     engagement,
     speed,
-    // Source provenance is retained separately. It must not change the fixed
-    // isolation formula, otherwise scores are not comparable across verticals.
     isolationScore: base,
   };
 }
@@ -335,10 +366,11 @@ export function evaluateAnswer(
   }
   if (
     typeof answerKey.expectedIndex === "number" ||
-    typeof answerKey.odd_shape_index === "number"
+    typeof answerKey.odd_shape_index === "number" ||
+    typeof answerKey.expected_index === "number"
   ) {
     const expected = Number(
-      answerKey.expectedIndex ?? answerKey.odd_shape_index,
+      answerKey.expectedIndex ?? answerKey.odd_shape_index ?? answerKey.expected_index,
     );
     return Number(response) === expected ? 1 : 0;
   }
@@ -361,11 +393,6 @@ export function evaluateAnswer(
   return 0;
 }
 
-/**
- * Parses the stable response format emitted by the constellation widget.
- * Duplicate or out-of-band indices are rejected before scoring so a client
- * cannot turn a malformed response into a passing count.
- */
 export function parseSelectedStarIds(response: unknown): number[] | null {
   if (
     typeof response !== "string" || !response.startsWith("connected_stars_")
@@ -422,153 +449,56 @@ export function supportTransition(
   return { level: current, reason: null, outcome: null };
 }
 
-export async function chooseVariant(
-  verticalId: VerticalId,
-  layer: number,
-  allowed: Array<
-    {
-      id: string;
-      difficulty: TaskCandidate["difficultyTier"];
-      modality: Modality;
-    }
-  >,
-  config?: Pick<
-    Engine1Config,
-    "sensory" | "layoutComplexityTier" | "hyperFocusTheme"
-  >,
-): Promise<
-  {
-    id: string;
-    difficulty: TaskCandidate["difficultyTier"];
-    modality: Modality;
-  }
-> {
-  const provider = Deno.env.get("TASK_LLM_PROVIDER") ?? "deterministic";
-  const apiKey = Deno.env.get("OPENAI_API_KEY");
-  if (provider !== "openai" || !apiKey) {
-    if (Deno.env.get("TASK_LLM_REQUIRED") === "true") {
-      throw new Error("Approved task LLM is not configured.");
-    }
-    return allowed[0];
-  }
+// ─── Sector Track Affinity & Elimination Funnel Math ────────────────────────
 
-  try {
-    const headers: Record<string, string> = {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-    };
-    const organization = Deno.env.get("OPENAI_ORGANIZATION");
-    if (organization) {
-      headers["OpenAI-Organization"] = organization;
-    }
+export function computeTrackAffinity(
+  sectorScores: Record<string, number>,
+): TrackAffinityResult {
+  const getScore = (sec: SectorId) =>
+    clamp(Number(sectorScores[sec] ?? 0.5));
 
-    const response = await fetch(
-      Deno.env.get("OPENAI_BASE_URL") ??
-        "https://api.openai.com/v1/chat/completions",
-      {
-        method: "POST",
-        headers,
-        body: JSON.stringify({
-          model: Deno.env.get("OPENAI_MODEL") ?? "gpt-4o-mini",
-          temperature: 0,
-          response_format: { type: "json_object" },
-          messages: [
-            {
-              role: "system",
-              content:
-                'Select exactly one allowed variant. Return JSON only: {"variant_id":"..."}. Never create content.',
-            },
-            {
-              role: "user",
-              content: JSON.stringify({
-                vertical_id: verticalId,
-                layer,
-                allowed_variants: allowed,
-                sensory_preferences: config?.sensory ?? {},
-                layout_complexity_tier: config?.layoutComplexityTier ??
-                  "standard",
-                theme: config?.hyperFocusTheme ?? "general",
-              }),
-            },
-          ],
-        }),
-      },
-    );
-    if (!response.ok) {
-      console.warn(`[engine2:chooseVariant] LLM returned status ${response.status}. Falling back to deterministic variant.`);
-      if (Deno.env.get("TASK_LLM_REQUIRED") === "true") {
-        throw new Error(`Task LLM request failed with status ${response.status}.`);
-      }
-      return allowed[0];
-    }
-    const result = await response.json();
-    const raw = result?.choices?.[0]?.message?.content;
-    let selected: string | undefined;
-    try {
-      selected = JSON.parse(raw).variant_id;
-    } catch {
-      selected = undefined;
-    }
-    return allowed.find((item) => item.id === selected) ?? allowed[0];
-  } catch (err) {
-    console.warn(`[engine2:chooseVariant] LLM fetch error: ${err}. Falling back to deterministic variant.`);
-    if (Deno.env.get("TASK_LLM_REQUIRED") === "true") {
-      throw err;
-    }
-    return allowed[0];
-  }
-}
+  const constellationRaw =
+    (0.28 * getScore("spatial_reasoning")) +
+    (0.28 * getScore("visual_anomaly_detection")) +
+    (0.24 * getScore("pattern_recognition")) +
+    (0.14 * getScore("motor_precision")) +
+    (0.03 * getScore("auditory_processing")) +
+    (0.03 * getScore("verbal_language"));
 
-export async function loadEngine1Config(
-  db: SupabaseClient,
-  guardianId: string,
-  childId: string,
-): Promise<Engine1Config> {
-  const [sensoryRes, profileRes] = await Promise.all([
-    db.from("sensory_configurations").select("key, proposed_value").eq(
-      "child_id",
-      childId,
-    ).eq("active", true).eq("status", "confirmed"),
-    db.from("profiles").select(
-      "sensory_control_matrix, generative_ui_parameters",
-    ).eq("id", guardianId).maybeSingle(),
-  ]);
-  if (sensoryRes.error) {
-    throw new Error("Engine 1 sensory configuration could not be read.");
-  }
-  if (!sensoryRes.data || sensoryRes.data.length === 0) {
-    throw new Error("A guardian-confirmed Engine 1 configuration is required.");
-  }
-  const sensory = Object.fromEntries(
-    sensoryRes.data.map((
-      row: { key: string; proposed_value: unknown },
-    ) => [row.key, row.proposed_value]),
-  );
-  const ui = (profileRes.data?.generative_ui_parameters ?? {}) as Record<
-    string,
-    unknown
-  >;
-  const active = Array.isArray(ui.active_verticals)
-    ? ui.active_verticals.filter((v): v is VerticalId =>
-      VERTICALS.includes(v as VerticalId)
-    )
-    : [...VERTICALS];
+  const calendarRaw =
+    (0.28 * getScore("sequencing_ordering")) +
+    (0.28 * getScore("working_memory")) +
+    (0.24 * getScore("numeric_reasoning")) +
+    (0.14 * getScore("categorization")) +
+    (0.03 * getScore("auditory_processing")) +
+    (0.03 * getScore("verbal_language"));
+
+  const constellation_mapper = clamp(constellationRaw);
+  const calendar_genius = clamp(calendarRaw);
+  const gap = Math.abs(calendar_genius - constellation_mapper);
+  const leader: TrackId = calendar_genius >= constellation_mapper
+    ? "calendar_genius"
+    : "constellation_mapper";
+  const isAmbiguous = gap <= 0.15;
+
   return {
-    sensory,
-    layoutComplexityTier: ui.layout_complexity_tier === "simple" ||
-        ui.layout_complexity_tier === "complex"
-      ? ui.layout_complexity_tier
-      : "standard",
-    activeVerticals: active.length > 0 ? active : [...VERTICALS],
-    hyperFocusTheme: typeof ui.hyper_focus_theme === "string"
-      ? ui.hyper_focus_theme.slice(0, 80)
-      : "general",
+    calendar_genius,
+    constellation_mapper,
+    gap,
+    leader,
+    isAmbiguous,
   };
 }
 
-function dayForDate(year: number, month: number, day: number): string {
-  return new Intl.DateTimeFormat("en-US", { weekday: "long", timeZone: "UTC" })
-    .format(new Date(Date.UTC(year, month - 1, day)));
+export function survivingSectorsForLayer(
+  layer: number,
+  rankedSectors: SectorId[],
+): SectorId[] {
+  if (layer <= 1) return [...rankedSectors];
+  if (layer === 2) return rankedSectors.slice(0, 6);
+  if (layer === 3) return rankedSectors.slice(0, 4);
+  if (layer === 4) return rankedSectors.slice(0, 3);
+  return rankedSectors.slice(0, 2);
 }
 
 function seededNumber(seed: string, max: number): number {
@@ -577,6 +507,210 @@ function seededNumber(seed: string, max: number): number {
     value = Math.imul(value ^ char.charCodeAt(0), 16777619);
   }
   return Math.abs(value) % max;
+}
+
+// ─── Discovery Domain Builders ──────────────────────────────────────────────
+
+function discoveryTask(
+  layer: number,
+  seed: string,
+  theme: string,
+  modality: Modality,
+  previousScore?: Record<string, any>,
+): TaskCandidate {
+  return {
+    verticalId: "discovery",
+    layer,
+    sourceType: layer === 1 ? "curated" : "created",
+    difficultyTier: layer >= 7 ? "advanced" : layer >= 2 ? "progressive" : "baseline",
+    modality,
+    payload: {
+      kind: "shape-sort",
+      prompt: "Which shape does NOT belong in this group?",
+      shapes: ["circle", "square", "triangle"],
+      theme_skin: theme,
+      modality,
+      domain: "shape_sort",
+      objective: layerObjective(layer),
+    },
+    answerKey: { odd_shape_index: 0 },
+    ruleVersion: `discovery-v1-layer-${layer}`,
+  };
+}
+
+function genericVerticalTask(
+  verticalId: VerticalId,
+  layer: number,
+  seed: string,
+  theme: string,
+  modality: Modality,
+): TaskCandidate {
+  const options = ["A", "B", "C", "D"];
+  const expected = options[seededNumber(`${seed}:expected`, options.length)];
+  return {
+    verticalId,
+    layer,
+    sourceType: layer === 1 ? "curated" : "created",
+    difficultyTier: layer >= 7 ? "advanced" : layer >= 2 ? "progressive" : "baseline",
+    modality,
+    payload: {
+      kind: "choice-pattern",
+      prompt: "Which choice completes the pattern?",
+      options,
+      theme_skin: theme,
+      modality,
+      objective: layerObjective(layer),
+    },
+    answerKey: { expected },
+    ruleVersion: `${verticalId}-v1-layer-${layer}`,
+  };
+}
+
+// ─── Sector Probe Builders (Engine 2.a Generic Probes) ─────────────────────
+
+function buildSectorTask(
+  sectorId: SectorId,
+  layer: number,
+  index: number,
+  seed: string,
+  theme: string,
+  modality: Modality,
+): TaskCandidate {
+  const taskSeed = `${seed}:${sectorId}:${layer}:${index}`;
+  let prompt = "";
+  let payloadExtra: Record<string, unknown> = {};
+  let answerKey: Record<string, unknown> = {};
+
+  switch (sectorId) {
+    case "pattern_recognition": {
+      prompt = "Which icon completes the visual sequence?";
+      const options = ["🔷", "⭐", "🔴", "🟢"];
+      const expectedIndex = seededNumber(`${taskSeed}:exp`, options.length);
+      payloadExtra = { kind: "pattern-sequence", icons: options, options };
+      answerKey = { expectedIndex, expected: options[expectedIndex] };
+      break;
+    }
+    case "spatial_reasoning": {
+      prompt = "Which shape matches the rotated pattern?";
+      const options = ["Shape 0°", "Shape 90°", "Shape 180°", "Shape Mirror"];
+      const expectedIndex = seededNumber(`${taskSeed}:exp`, options.length);
+      payloadExtra = { kind: "spatial-rotation", shapes: options, options };
+      answerKey = { expectedIndex, expected: options[expectedIndex] };
+      break;
+    }
+    case "sequencing_ordering": {
+      prompt = "Select the item that comes next in order.";
+      const options = ["First", "Second", "Third", "Fourth"];
+      const expectedIndex = seededNumber(`${taskSeed}:exp`, options.length);
+      payloadExtra = { kind: "ordering-step", steps: options, options };
+      answerKey = { expectedIndex, expected: options[expectedIndex] };
+      break;
+    }
+    case "working_memory": {
+      prompt = "Recall the highlighted icon from the brief flash.";
+      const options = ["🌟", "🎨", "🚀", "🧩"];
+      const expectedIndex = seededNumber(`${taskSeed}:exp`, options.length);
+      payloadExtra = { kind: "memory-flash", items: options, options, delay_ms: 1200 };
+      answerKey = { expectedIndex, expected: options[expectedIndex] };
+      break;
+    }
+    case "numeric_reasoning": {
+      prompt = "Count the elements and select the matching quantity.";
+      const options = ["3", "5", "7", "9"];
+      const expectedIndex = seededNumber(`${taskSeed}:exp`, options.length);
+      payloadExtra = { kind: "numeric-count", count_items: options, options };
+      answerKey = { expectedIndex, expected: options[expectedIndex] };
+      break;
+    }
+    case "categorization": {
+      prompt = "Which item belongs to the same rule group?";
+      const options = ["Group A", "Group B", "Group C", "Group D"];
+      const expectedIndex = seededNumber(`${taskSeed}:exp`, options.length);
+      payloadExtra = { kind: "category-rule", groups: options, options };
+      answerKey = { expectedIndex, expected: options[expectedIndex] };
+      break;
+    }
+    case "visual_anomaly_detection": {
+      prompt = "Identify the displaced or altered element.";
+      const options = ["Normal A", "Normal B", "Altered C", "Normal D"];
+      const expectedIndex = seededNumber(`${taskSeed}:exp`, options.length);
+      payloadExtra = { kind: "anomaly-spot", elements: options, options };
+      answerKey = { expectedIndex, expected: options[expectedIndex] };
+      break;
+    }
+    case "auditory_processing": {
+      prompt = "Listen or match the rhythmic sound cue to the icon.";
+      const options = ["Tone High", "Tone Mid", "Tone Low", "Rhythm Pulse"];
+      const expectedIndex = seededNumber(`${taskSeed}:exp`, options.length);
+      payloadExtra = { kind: "audio-rhythm-match", sound_cues: options, options };
+      answerKey = { expectedIndex, expected: options[expectedIndex] };
+      break;
+    }
+    case "verbal_language": {
+      prompt = "Match the paired icon analogy.";
+      const options = ["Sun -> Light", "Cloud -> Rain", "Tree -> Leaf", "Star -> Night"];
+      const expectedIndex = seededNumber(`${taskSeed}:exp`, options.length);
+      payloadExtra = { kind: "icon-analogy", analogies: options, options };
+      answerKey = { expectedIndex, expected: options[expectedIndex] };
+      break;
+    }
+    case "motor_precision":
+    default: {
+      prompt = "Tap and trace the marker with steady motion.";
+      const options = ["Path Alpha", "Path Beta", "Path Gamma", "Path Delta"];
+      const expectedIndex = seededNumber(`${taskSeed}:exp`, options.length);
+      payloadExtra = { kind: "motor-trace-target", targets: options, options };
+      answerKey = { expectedIndex, expected: options[expectedIndex] };
+      break;
+    }
+  }
+
+  return {
+    verticalId: sectorId,
+    layer,
+    sourceType: "curated",
+    difficultyTier: "baseline",
+    modality,
+    payload: {
+      sector_id: sectorId,
+      prompt,
+      theme_skin: theme,
+      modality,
+      objective: "continuous motion cognitive probe",
+      ...payloadExtra,
+    },
+    answerKey,
+    ruleVersion: `${sectorId}-v1-layer-${layer}`,
+  };
+}
+
+export function createLayer1SectorTasks(
+  sessionId: string,
+  seed: string,
+  config: Engine1Config,
+): TaskCandidate[] {
+  const theme = config.hyperFocusTheme || "general";
+  const tasks: TaskCandidate[] = [];
+
+  for (const sector of SECTORS) {
+    for (let q = 1; q <= 3; q++) {
+      tasks.push(
+        buildSectorTask(sector, 1, q, `${sessionId}:${seed}`, theme, "visual")
+      );
+    }
+  }
+
+  return tasks.sort((a, b) =>
+    seededNumber(`${seed}:${a.verticalId}:${a.ruleVersion}`, 100) -
+    seededNumber(`${seed}:${b.verticalId}:${b.ruleVersion}`, 100)
+  );
+}
+
+// ─── Production Track Task Builders ────────────────────────────────────────
+
+function dayForDate(year: number, month: number, day: number): string {
+  return new Intl.DateTimeFormat("en-US", { weekday: "long", timeZone: "UTC" })
+    .format(new Date(Date.UTC(year, month - 1, day)));
 }
 
 function calendarTask(
@@ -659,32 +793,40 @@ function constellationTask(
 
 export function layerObjective(layer: number): string {
   const objectives: Record<number, string> = {
-    1: "baseline pattern exploration",
-    2: "progressive difficulty",
-    3: "novel structure",
-    4: "timing flexibility",
-    5: "modality comparison",
-    6: "distractor resistance",
-    7: "transfer of strategy",
-    8: "strategy signals",
-    9: "consistency and fatigue",
-    10: "real-world simulation",
+    1: "baseline sector exploration",
+    2: "progressive sector difficulty",
+    3: "novel structure test",
+    4: "timing flexibility test",
+    5: "modality router comparison",
+    6: "distractor resistance stress test",
+    7: "transfer strategy test",
+    8: "behavioral signal collection",
+    9: "consistency and fatigue window",
+    10: "real-world track simulation decision",
   };
   return objectives[layer] ?? objectives[1];
 }
 
-export async function orchestrateLayer(
+export async function chooseVariant(
+  verticalId: VerticalId,
   layer: number,
-  activeVerticals: VerticalId[],
-  previousScores: Record<
-    string,
-    { accuracy: number; speed: number; isolationScore: number }
+  allowed: Array<
+    {
+      id: string;
+      difficulty: TaskCandidate["difficultyTier"];
+      modality: Modality;
+    }
+  >,
+  config?: Pick<
+    Engine1Config,
+    "sensory" | "layoutComplexityTier" | "hyperFocusTheme"
   >,
 ): Promise<
-  Record<
-    string,
-    { difficulty: "baseline" | "progressive" | "advanced"; modality: Modality }
-  >
+  {
+    id: string;
+    difficulty: TaskCandidate["difficultyTier"];
+    modality: Modality;
+  }
 > {
   const provider = Deno.env.get("TASK_LLM_PROVIDER") ?? "deterministic";
   const apiKey = Deno.env.get("OPENAI_API_KEY");
@@ -692,384 +834,126 @@ export async function orchestrateLayer(
     if (Deno.env.get("TASK_LLM_REQUIRED") === "true") {
       throw new Error("Approved task LLM is not configured.");
     }
-    const plan: Record<
-      string,
-      {
-        difficulty: "baseline" | "progressive" | "advanced";
-        modality: Modality;
-      }
-    > = {};
-    for (const v of activeVerticals) {
-      plan[v] = {
-        difficulty: layer >= 7
-          ? "advanced"
-          : (layer >= 2 ? "progressive" : "baseline"),
-        modality: "visual",
-      };
-    }
-    return plan;
+    return allowed[0];
   }
 
-  const response = await fetch(
-    Deno.env.get("OPENAI_BASE_URL") ??
-      "https://api.openai.com/v1/chat/completions",
-    {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: Deno.env.get("OPENAI_MODEL") ?? "gpt-4o-mini",
-        temperature: 0,
-        response_format: { type: "json_object" },
-        messages: [
-          {
-            role: "system",
-            content:
-              'You are a strengths exploration orchestrator. Review the child\'s previous scores and select the best subjects and difficulties for the next layer. Output JSON matching: { "plan": { "<vertical_id>": { "difficulty": "baseline"|"progressive"|"advanced", "modality": "visual"|"audio" } } }. Do not diagnose or assess. Simply route.',
-          },
-          {
-            role: "user",
-            content: JSON.stringify({
-              target_layer: layer,
-              active_verticals: activeVerticals,
-              previous_scores: previousScores,
-            }),
-          },
-        ],
-      }),
-    },
-  );
-  if (!response.ok) {
-    throw new Error(`Task LLM request failed with status ${response.status}.`);
-  }
-  const result = await response.json();
-  const raw = result?.choices?.[0]?.message?.content;
   try {
-    const parsed = JSON.parse(raw);
-    return parsed.plan ?? {};
-  } catch {
-    const plan: Record<
-      string,
-      {
-        difficulty: "baseline" | "progressive" | "advanced";
-        modality: Modality;
-      }
-    > = {};
-    for (const v of activeVerticals) {
-      plan[v] = {
-        difficulty: layer >= 7
-          ? "advanced"
-          : (layer >= 2 ? "progressive" : "baseline"),
-        modality: "visual",
-      };
+    const headers: Record<string, string> = {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    };
+    const organization = Deno.env.get("OPENAI_ORGANIZATION");
+    if (organization) {
+      headers["OpenAI-Organization"] = organization;
     }
-    return plan;
+
+    const response = await fetch(
+      Deno.env.get("OPENAI_BASE_URL") ??
+        "https://api.openai.com/v1/chat/completions",
+      {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          model: Deno.env.get("OPENAI_MODEL") ?? "gpt-4o-mini",
+          temperature: 0,
+          response_format: { type: "json_object" },
+          messages: [
+            {
+              role: "system",
+              content:
+                'Select exactly one allowed variant. Return JSON only: {"variant_id":"..."}. Never create content.',
+            },
+            {
+              role: "user",
+              content: JSON.stringify({
+                vertical_id: verticalId,
+                layer,
+                allowed_variants: allowed,
+                sensory_preferences: config?.sensory ?? {},
+                layout_complexity_tier: config?.layoutComplexityTier ??
+                  "standard",
+                theme: config?.hyperFocusTheme ?? "general",
+              }),
+            },
+          ],
+        }),
+      },
+    );
+    if (!response.ok) {
+      console.warn(
+        `[engine2:chooseVariant] LLM returned status ${response.status}. Falling back to deterministic variant.`,
+      );
+      if (Deno.env.get("TASK_LLM_REQUIRED") === "true") {
+        throw new Error(
+          `Task LLM request failed with status ${response.status}.`,
+        );
+      }
+      return allowed[0];
+    }
+    const result = await response.json();
+    const raw = result?.choices?.[0]?.message?.content;
+    let selected: string | undefined;
+    try {
+      selected = JSON.parse(raw).variant_id;
+    } catch {
+      selected = undefined;
+    }
+    return allowed.find((item) => item.id === selected) ?? allowed[0];
+  } catch (err) {
+    console.warn(
+      `[engine2:chooseVariant] LLM fetch error: ${err}. Falling back to deterministic variant.`,
+    );
+    if (Deno.env.get("TASK_LLM_REQUIRED") === "true") {
+      throw err;
+    }
+    return allowed[0];
   }
 }
 
-// ─── Discovery Domain Definitions ────────────────────────────────────────────
-// These are completely independent from calendar_genius or constellation_mapper.
-// The discovery funnel tests broad foundational skills (shape reasoning, colour
-// patterns, sequences, spatial logic, memory) so the engine can surface the
-// child's strengths without presupposing the output vertical.
-
-const SHAPES = [
-  "circle",
-  "square",
-  "triangle",
-  "star",
-  "hexagon",
-  "diamond",
-  "rectangle",
-  "oval",
-] as const;
-const COLOURS = [
-  "red",
-  "blue",
-  "green",
-  "yellow",
-  "orange",
-  "purple",
-  "pink",
-  "brown",
-] as const;
-
-type DiscoveryDomain =
-  | "shape_sort"
-  | "colour_pattern"
-  | "number_sequence"
-  | "spatial_mirror"
-  | "memory_match";
-
-// How many question domains are unlocked per layer (more domains = harder)
-function discoveryDomainsForLayer(layer: number): DiscoveryDomain[] {
-  const all: DiscoveryDomain[] = [
-    "shape_sort",
-    "colour_pattern",
-    "number_sequence",
-    "spatial_mirror",
-    "memory_match",
-  ];
-  // Layer 1-2: simple shape/colour; layers 3-5 add sequences; layers 6+ add spatial/memory
-  if (layer <= 2) return ["shape_sort", "colour_pattern"];
-  if (layer <= 5) return ["shape_sort", "colour_pattern", "number_sequence"];
-  return all;
-}
-
-function discoveryDifficulty(
-  layer: number,
-): "baseline" | "progressive" | "advanced" {
-  if (layer >= 7) return "advanced";
-  if (layer >= 2) return "progressive";
-  return "baseline";
-}
-
-function buildShapeSort(
-  layer: number,
-  seed: string,
-): { payload: Record<string, unknown>; answerKey: Record<string, unknown> } {
-  const shapeCount = 3 + Math.min(layer, 5); // 4 to 8 shapes
-  const targetIdx = seededNumber(`${seed}:tgt`, shapeCount);
-  const shapes = Array.from(
-    { length: shapeCount },
-    (_, i) => SHAPES[seededNumber(`${seed}:s${i}`, SHAPES.length)],
-  );
-  const target = shapes[targetIdx];
-  // The odd-one-out: replace target with a different shape
-  const oddShape = SHAPES[
-    (SHAPES.indexOf(target as typeof SHAPES[number]) + 1 +
-      seededNumber(`${seed}:odd`, SHAPES.length - 1)) % SHAPES.length
-  ];
-  const options = [...shapes];
-  options[targetIdx] = oddShape;
-  return {
-    payload: {
-      kind: "shape-sort",
-      prompt: `Which shape does NOT belong in this group?`,
-      shapes: options,
-      distractor_count: Math.floor(layer / 3),
-    },
-    answerKey: { odd_shape_index: targetIdx, odd_shape: oddShape },
-  };
-}
-
-function buildColourPattern(
-  layer: number,
-  seed: string,
-): { payload: Record<string, unknown>; answerKey: Record<string, unknown> } {
-  const patternLen = 3 + Math.min(layer - 1, 4); // 3 to 7 colours in sequence
-  const sequence = Array.from(
-    { length: patternLen },
-    (_, i) => COLOURS[seededNumber(`${seed}:c${i}`, COLOURS.length)],
-  );
-  const nextColour = COLOURS[seededNumber(`${seed}:next`, COLOURS.length)];
-  return {
-    payload: {
-      kind: "colour-pattern",
-      prompt: "What colour comes next in the pattern?",
-      sequence,
-      options: COLOURS.slice(0, 4 + Math.floor(layer / 3)),
-    },
-    answerKey: { expected: nextColour },
-  };
-}
-
-function buildNumberSequence(
-  layer: number,
-  seed: string,
-): { payload: Record<string, unknown>; answerKey: Record<string, unknown> } {
-  const step = 1 + seededNumber(`${seed}:step`, layer + 1); // step size grows with layer
-  const start = 1 + seededNumber(`${seed}:start`, 10);
-  const length = 4 + Math.min(layer, 3);
-  const sequence = Array.from({ length }, (_, i) => start + i * step);
-  const nextVal = start + length * step;
-  return {
-    payload: {
-      kind: "number-sequence",
-      prompt: "What number comes next?",
-      sequence,
-    },
-    answerKey: { expected: nextVal },
-  };
-}
-
-function buildSpatialMirror(
-  layer: number,
-  seed: string,
-): { payload: Record<string, unknown>; answerKey: Record<string, unknown> } {
-  const gridSize = 3 + Math.floor(layer / 4); // 3x3 to 5x5
-  const cells = Array.from(
-    { length: gridSize * gridSize },
-    (_, i) => seededNumber(`${seed}:cell${i}`, 2),
-  );
-  // The "mirror" answer is the horizontal flip of the row at position seededNumber
-  const targetRow = seededNumber(`${seed}:row`, gridSize);
-  const row = cells.slice(targetRow * gridSize, (targetRow + 1) * gridSize);
-  const mirrored = [...row].reverse();
-  return {
-    payload: {
-      kind: "spatial-mirror",
-      prompt: "Which row is the mirror image of the highlighted row?",
-      grid: cells,
-      grid_size: gridSize,
-      target_row: targetRow,
-    },
-    answerKey: { mirrored_row: mirrored },
-  };
-}
-
-function buildMemoryMatch(
-  layer: number,
-  seed: string,
-): { payload: Record<string, unknown>; answerKey: Record<string, unknown> } {
-  const pairCount = 2 + Math.min(layer, 4); // 2 to 6 pairs
-  const allShapes = Array.from(
-    { length: pairCount },
-    (_, i) => SHAPES[seededNumber(`${seed}:m${i}`, SHAPES.length)],
-  );
-  // Shuffle by seeding
-  const shuffled = [...allShapes, ...allShapes].sort((a, b) =>
-    seededNumber(`${seed}:sort${a}${b}`, 100) - 50
-  );
-  return {
-    payload: {
-      kind: "memory-match",
-      prompt: "Remember the positions, then match the pairs.",
-      cards: shuffled,
-      pair_count: pairCount,
-    },
-    answerKey: { pairs: allShapes },
-  };
-}
-
-function discoveryTask(
-  layer: number,
-  seed: string,
-  theme: string,
-  modality: Modality,
-  previousScore?: Record<string, any>,
-): TaskCandidate {
-  // Select domain based on seed (not previous skill data — we don't presuppose the outcome)
-  const adaptSeed = previousScore?.accuracy
-    ? `${seed}:acc${Math.round(previousScore.accuracy * 10)}`
-    : seed;
-  const availableDomains = discoveryDomainsForLayer(layer);
-  const domain = availableDomains[
-    seededNumber(`${adaptSeed}:domain`, availableDomains.length)
-  ];
-
-  let content: {
-    payload: Record<string, unknown>;
-    answerKey: Record<string, unknown>;
-  };
-  switch (domain) {
-    case "colour_pattern":
-      content = buildColourPattern(layer, adaptSeed);
-      break;
-    case "number_sequence":
-      content = buildNumberSequence(layer, adaptSeed);
-      break;
-    case "spatial_mirror":
-      content = buildSpatialMirror(layer, adaptSeed);
-      break;
-    case "memory_match":
-      content = buildMemoryMatch(layer, adaptSeed);
-      break;
-    case "shape_sort":
-    default:
-      content = buildShapeSort(layer, adaptSeed);
-      break;
+export async function loadEngine1Config(
+  db: SupabaseClient,
+  guardianId: string,
+  childId: string,
+): Promise<Engine1Config> {
+  const [sensoryRes, profileRes] = await Promise.all([
+    db.from("sensory_configurations").select("key, proposed_value").eq(
+      "child_id",
+      childId,
+    ).eq("active", true).eq("status", "confirmed"),
+    db.from("profiles").select(
+      "sensory_control_matrix, generative_ui_parameters",
+    ).eq("id", guardianId).maybeSingle(),
+  ]);
+  if (sensoryRes.error) {
+    throw new Error("Engine 1 sensory configuration could not be read.");
   }
-
+  if (!sensoryRes.data || sensoryRes.data.length === 0) {
+    throw new Error("A guardian-confirmed Engine 1 configuration is required.");
+  }
+  const sensory = Object.fromEntries(
+    sensoryRes.data.map((
+      row: { key: string; proposed_value: unknown },
+    ) => [row.key, row.proposed_value]),
+  );
+  const ui = (profileRes.data?.generative_ui_parameters ?? {}) as Record<
+    string,
+    unknown
+  >;
+  const active = Array.isArray(ui.active_verticals)
+    ? ui.active_verticals.filter((v): v is VerticalId =>
+      VERTICALS.includes(v as VerticalId)
+    )
+    : [...VERTICALS];
   return {
-    verticalId: "discovery",
-    layer,
-    sourceType: layer === 1 ? "curated" : "created",
-    difficultyTier: discoveryDifficulty(layer),
-    modality,
-    payload: {
-      ...content.payload,
-      theme_skin: theme,
-      modality,
-      domain,
-      objective: layerObjective(layer),
-    },
-    answerKey: content.answerKey,
-    ruleVersion: `discovery-v1-layer-${layer}-${domain}`,
-  };
-}
-
-const CURATED_BASELINES: Record<VerticalId, { id: string; family: string }> = {
-  calendar_genius: { id: "calendar-baseline-v1", family: "calendar-order" },
-  constellation_mapper: {
-    id: "constellation-baseline-v1",
-    family: "constellation-anomaly",
-  },
-  discovery: { id: "discovery-baseline-v1", family: "broad-pattern" },
-  visual_pattern_explorer: {
-    id: "visual-pattern-baseline-v1",
-    family: "visual-pattern",
-  },
-  sequence_navigator: {
-    id: "sequence-baseline-v1",
-    family: "ordered-sequence",
-  },
-  spatial_builder: { id: "spatial-baseline-v1", family: "spatial-relation" },
-  memory_weaver: { id: "memory-baseline-v1", family: "memory-recall" },
-  language_patterner: {
-    id: "language-baseline-v1",
-    family: "language-pattern",
-  },
-  number_navigator: { id: "number-baseline-v1", family: "number-pattern" },
-  logic_lens: { id: "logic-baseline-v1", family: "logic-relation" },
-};
-
-const GENERIC_VERTICAL_PROMPTS: Partial<Record<VerticalId, string>> = {
-  visual_pattern_explorer: "Which symbol completes this visual pattern?",
-  sequence_navigator: "Which step comes next in this sequence?",
-  spatial_builder: "Which map marker matches the shown relation?",
-  memory_weaver: "Which item belongs with the pattern you just explored?",
-  language_patterner: "Which word follows the same pattern?",
-  number_navigator: "Which number completes the route?",
-  logic_lens: "Which choice follows the rule?",
-};
-
-function genericVerticalTask(
-  verticalId: Exclude<
-    VerticalId,
-    "calendar_genius" | "constellation_mapper" | "discovery"
-  >,
-  layer: number,
-  seed: string,
-  theme: string,
-  modality: Modality,
-): TaskCandidate {
-  const options = ["A", "B", "C", "D"];
-  const expected = options[seededNumber(`${seed}:expected`, options.length)];
-  const prompt = GENERIC_VERTICAL_PROMPTS[verticalId] ??
-    "Which choice completes the pattern?";
-  return {
-    verticalId,
-    layer,
-    sourceType: layer === 1 ? "curated" : "created",
-    difficultyTier: layer >= 7
-      ? "advanced"
-      : layer >= 2
-      ? "progressive"
-      : "baseline",
-    modality,
-    payload: {
-      kind: "choice-pattern",
-      prompt,
-      options,
-      theme_skin: theme,
-      modality,
-      objective: layerObjective(layer),
-    },
-    answerKey: { expected },
-    ruleVersion: `${verticalId}-v1-layer-${layer}`,
+    sensory,
+    layoutComplexityTier: ui.layout_complexity_tier === "simple" ||
+        ui.layout_complexity_tier === "complex"
+      ? ui.layout_complexity_tier
+      : "standard",
+    activeVerticals: active.length > 0 ? active : [...VERTICALS],
+    hyperFocusTheme: typeof ui.hyper_focus_theme === "string"
+      ? ui.hyper_focus_theme.slice(0, 80)
+      : "general",
   };
 }
 
@@ -1151,29 +1035,24 @@ export async function createTask(
   }
   const theme = config.hyperFocusTheme ||
     (choice.id === "calm-visual" ? "calm" : "general");
-  const task = verticalId === "discovery"
-    ? discoveryTask(
-      layer,
-      seed,
-      theme,
-      normalizeModality(choice.modality),
-      previousScore,
-    )
+
+  const task = SECTORS.includes(verticalId as SectorId)
+    ? buildSectorTask(verticalId as SectorId, layer, 1, seed, theme, normalizeModality(choice.modality))
+    : verticalId === "discovery"
+    ? discoveryTask(layer, seed, theme, normalizeModality(choice.modality), previousScore)
     : verticalId === "calendar_genius"
     ? calendarTask(layer, seed, theme, normalizeModality(choice.modality))
     : verticalId === "constellation_mapper"
     ? constellationTask(layer, seed, theme, normalizeModality(choice.modality))
-    : genericVerticalTask(
-      verticalId,
-      layer,
-      seed,
-      theme,
-      normalizeModality(choice.modality),
-    );
-  const baseline = CURATED_BASELINES[verticalId];
+    : genericVerticalTask(verticalId, layer, seed, theme, normalizeModality(choice.modality));
+
+  const baselineId = SECTORS.includes(verticalId as SectorId)
+    ? `${verticalId}-baseline-v1`
+    : `${verticalId}-baseline-v1`;
+
   const protocol = layerProtocol(verticalId, layer);
   task.composition = {
-    curatedBaselineId: baseline.id,
+    curatedBaselineId: baselineId,
     predictedVariantId: choice.id,
     createdInstanceId: `${verticalId}:${layer}:${
       seededNumber(`${seed}:instance`, 1_000_000)
@@ -1183,7 +1062,6 @@ export async function createTask(
     ...task.payload,
     content_composition: {
       curated_baseline_id: task.composition.curatedBaselineId,
-      curated_family: baseline.family,
       predicted_variant_id: task.composition.predictedVariantId,
       created_instance_id: task.composition.createdInstanceId,
     },
@@ -1212,9 +1090,7 @@ export function publicTask(
     ...((full.public_payload ?? full) as Record<string, unknown>),
   };
   const answerKey = full.answer_key as Record<string, unknown> | undefined;
-  // Defense in depth for tasks created before answer isolation was enforced.
-  // The client only needs the prompt and interaction data; scoring stays on
-  // the server and answer keys never cross this boundary.
+
   delete payload.correct_day;
   delete payload.answer_key;
   delete payload.expected;
@@ -1237,50 +1113,23 @@ export function publicTask(
     Math.min(5, Number(options.supportLevel ?? 0)),
   );
   payload.support = supportGuidance(supportLevel);
-  if (supportLevel >= 4 && Array.isArray(payload.options) && answerKey) {
-    const expected = answerKey.expected;
-    if (typeof expected === "string" && payload.options.includes(expected)) {
-      payload.options = [
-        expected,
-        ...payload.options.filter((option) => option !== expected).slice(0, 1),
-      ];
-    }
-  }
-  if (supportLevel >= 4 && payload.kind === "calendar-order" && answerKey) {
-    const expected = answerKey.expected;
-    if (typeof expected === "string") {
-      const days = [
-        "Monday",
-        "Tuesday",
-        "Wednesday",
-        "Thursday",
-        "Friday",
-        "Saturday",
-        "Sunday",
-      ];
-      payload.visible_options = [
-        expected,
-        ...days.filter((day) => day !== expected).slice(0, 1),
-      ];
-    }
-  }
   payload.execution_index = executionIndex;
   payload.required_executions = required;
   if (timingBudgets.length) {
     payload.timing_budget_ms = timingBudgets[executionIndex - 1] ?? null;
   }
   payload.modality = modality;
-  // Keep the existing Flutter widgets compatible while the server remains the
-  // scoring authority. The answer is not used to calculate server scores.
+
   return {
     task_id: taskRow.id,
     layer: taskRow.layer_number,
     total_layers: 10,
     vertical_id: taskRow.vertical_id,
+    sector_id: payload.sector_id ?? taskRow.vertical_id,
     source_type: taskRow.source_type,
     difficulty_tier: taskRow.difficulty_tier,
     theme_skin: payload.theme_skin ?? "calm",
-    prompt: payload.prompt ?? "Explore the pattern below.",
+    prompt: payload.prompt ?? "Explore the cognitive pattern below.",
     task_data: payload,
     answer_key_present: !!answerKey,
     modality,

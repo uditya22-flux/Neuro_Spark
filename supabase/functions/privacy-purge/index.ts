@@ -133,6 +133,7 @@ async function performCascadeDelete(
     if (childId) {
       // Child-scoped purge
       await svc.from("discovery_intakes").delete().eq("child_id", childId);
+      await svc.from("guardian_exploration_preferences").delete().eq("child_id", childId);
       await svc.from("deepening_profiles").delete().eq("child_id", childId);
       await svc.from("stage3_handoffs").delete().eq("child_id", childId);
       await svc.from("consistency_window").delete().eq("child_id", childId);
@@ -164,6 +165,7 @@ async function performCascadeDelete(
       const childIds = (children ?? []).map((c: { id: string }) => c.id);
       if (childIds.length > 0) {
         await svc.from("discovery_intakes").delete().in("child_id", childIds);
+        await svc.from("guardian_exploration_preferences").delete().in("child_id", childIds);
         await svc.from("deepening_profiles").delete().in("child_id", childIds);
         await svc.from("stage3_handoffs").delete().in("child_id", childIds);
         await svc.from("consistency_window").delete().in("child_id", childIds);

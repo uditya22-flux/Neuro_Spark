@@ -15,11 +15,10 @@ import {
 } from "../_shared/validate.ts";
 import {
   contentHash,
-  createTask,
+  createLayer1SectorTasks,
   loadEngine1Config,
   publicTask,
-  type VerticalId,
-  VERTICALS,
+  SECTORS,
 } from "../_shared/engine2.ts";
 
 Deno.serve(async (req: Request): Promise<Response> => {
@@ -106,58 +105,44 @@ Deno.serve(async (req: Request): Promise<Response> => {
       return internalError("Layer 1 tasks could not be read.");
     }
 
-    const taskRows: Record<string, unknown>[] = [];
-    for (const vertical of config.activeVerticals) {
-      const found = (existing.data ?? []).find((row: Record<string, unknown>) =>
-        row.vertical_id === vertical
-      );
-      if (found) {
-        taskRows.push(found);
-        continue;
-      }
-      const task = await createTask(
-        vertical,
-        1,
-        `${session.id}:${vertical}`,
+    const existingTasks = (existing.data ?? []) as Record<string, unknown>[];
+    const taskRows: Record<string, unknown>[] = [...existingTasks];
+
+    if (existingTasks.length < 30) {
+      const sectorTasks = createLayer1SectorTasks(
+        String(session.id),
+        String(session.id),
         config,
       );
-      const hash = await contentHash({
-        vertical,
-        layer: 1,
-        payload: task.payload,
-        answer: task.answerKey,
-      });
-      const { data, error } = await svc.from("vertical_task_bank").insert({
-        child_id: childId,
-        session_id: session.id,
-        vertical_id: vertical,
-        layer_number: 1,
-        source_type: task.sourceType,
-        difficulty_tier: task.difficultyTier,
-        item_payload: {
-          public_payload: task.payload,
-          answer_key: task.answerKey,
-        },
-        content_hash: hash,
-        rule_version: task.ruleVersion,
-      }).select(
-        "id, vertical_id, layer_number, source_type, difficulty_tier, item_payload",
-      ).single();
-      if (data) {
-        taskRows.push(data);
-      } else {
-        const { data: concurrentTask } = await svc.from("vertical_task_bank")
-          .select(
-            "id, vertical_id, layer_number, source_type, difficulty_tier, item_payload",
-          ).eq("session_id", session.id).eq("child_id", childId).eq(
-            "vertical_id",
-            vertical,
-          ).eq("layer_number", 1).eq("active", true).maybeSingle();
-        if (!concurrentTask) {
-          console.error("[layer1-tasks] task insert:", error?.message);
-          return internalError("Layer 1 task could not be assembled.");
+
+      for (const task of sectorTasks) {
+        const hash = await contentHash({
+          vertical: task.verticalId,
+          layer: 1,
+          payload: task.payload,
+          answer: task.answerKey,
+        });
+
+        const { data, error } = await svc.from("vertical_task_bank").insert({
+          child_id: childId,
+          session_id: session.id,
+          vertical_id: task.verticalId,
+          layer_number: 1,
+          source_type: task.sourceType,
+          difficulty_tier: task.difficultyTier,
+          item_payload: {
+            public_payload: task.payload,
+            answer_key: task.answerKey,
+          },
+          content_hash: hash,
+          rule_version: task.ruleVersion,
+        }).select(
+          "id, vertical_id, layer_number, source_type, difficulty_tier, item_payload",
+        ).maybeSingle();
+
+        if (data) {
+          taskRows.push(data);
         }
-        taskRows.push(concurrentTask);
       }
     }
 
@@ -165,13 +150,14 @@ Deno.serve(async (req: Request): Promise<Response> => {
       action: "engine2.layer1_tasks_issued",
       guardianId,
       childId,
-      meta: { session_id: session.id, verticals: config.activeVerticals },
+      meta: { session_id: session.id, sector_count: SECTORS.length, total_probes: taskRows.length },
     });
     return ok({
       session_id: session.id,
       phase: "layer1",
       verticals: taskRows.map((taskRow) => publicTask(taskRow)),
-      active_verticals: config.activeVerticals,
+      active_sectors: [...SECTORS],
+      total_questions: taskRows.length,
     }, 200);
   } catch (err) {
     if (err instanceof ValidationError) return badRequest(err.message);

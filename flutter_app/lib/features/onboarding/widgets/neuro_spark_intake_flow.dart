@@ -69,13 +69,9 @@ class _NeuroSparkIntakeFlowState extends ConsumerState<NeuroSparkIntakeFlow> {
     if (mounted) {
       setState(() => _isSubmitting = false);
       if (success) {
-        ref.read(authStatusProvider.notifier).state = const AuthUserStatus(
-          isLoggedIn: true,
-          userId: 'user_guardian_101',
-          hasCompletedIntake: true,
-          hasCompletedAssessment: false,
-        );
-        context.go('/assessment-canvas');
+        // The guardian preferences route owns real child selection and
+        // Supabase persistence; this legacy visual flow must not bypass it.
+        context.go('/intake');
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Failed to initialize theme. Please try again.')),

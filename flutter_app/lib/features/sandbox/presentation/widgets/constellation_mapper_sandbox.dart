@@ -124,14 +124,14 @@ class _ConstellationMapperSandboxState extends ConsumerState<ConstellationMapper
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Constellation Mapper Sandbox',
+                      'Constellation workshop',
                       style: theme.textTheme.titleMedium?.copyWith(
                         fontWeight: FontWeight.bold,
                       ),
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      'Drag to rotate 3D cluster & tap anomaly points ($remainingAnomalies remaining)',
+                      'Turn the sky map and tap the stars that need a little care ($remainingAnomalies remaining)',
                       style: theme.textTheme.bodySmall?.copyWith(
                         color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
                       ),
@@ -216,7 +216,7 @@ class _ConstellationMapperSandboxState extends ConsumerState<ConstellationMapper
                               const Icon(Icons.stars_rounded, size: 64, color: Color(0xFF5B8CAE)),
                               const SizedBox(height: 12),
                               Text(
-                                'Constellation Pattern Cleared!',
+                                'The sky looks clear!',
                                 style: theme.textTheme.titleLarge?.copyWith(
                                   fontWeight: FontWeight.bold,
                                   color: Colors.white,
@@ -224,7 +224,7 @@ class _ConstellationMapperSandboxState extends ConsumerState<ConstellationMapper
                               ),
                               const SizedBox(height: 6),
                               const Text(
-                                'Generating next star distribution...',
+                                'A new sky is forming...',
                                 style: TextStyle(color: Colors.white70),
                               ),
                             ],

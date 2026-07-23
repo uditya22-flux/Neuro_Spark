@@ -1,7 +1,5 @@
-import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:http/http.dart' as http;
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'supabase_service.dart';
 
@@ -30,14 +28,6 @@ class StrengthProfile {
 
 class AiEdgeService {
   final SupabaseService _supabaseService;
-
-  // Groq API Key (Configurable via environment or fallback default key)
-  static const String _groqApiKey = String.fromEnvironment(
-    'GROQ_API_KEY',
-    defaultValue: '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',
-  );
-
-  static const String _groqEndpoint = 'https://api.groq.com/openai/v1/chat/completions';
 
   AiEdgeService(this._supabaseService);
 
@@ -105,55 +95,10 @@ class AiEdgeService {
     }
   }
 
-  /// Generates dynamic UI JSON layouts using Groq AI LPU (`llama-3.3-70b-versatile`).
+  /// Generates a local Gen-UI fallback. Raw prompt text must never be sent to
+  /// an LLM from Flutter; cloud generation belongs in a scoped Edge Function.
   Future<Map<String, dynamic>> generateUiFromPrompt(String prompt) async {
-    try {
-      debugPrint('[AiEdgeService] Invoking Groq LPU API for prompt: "$prompt"');
-
-      final systemPrompt = '''
-You are a Generative UI Engine for neurodivergent accessibility. You MUST return ONLY a valid JSON object matching the GenUI parser schema.
-Available node types:
-- mascot_header: { "type": "mascot_header", "title": string, "subtitle": string, "mascot": "rocket"|"dinosaur"|"train"|"sea_turtle"|"code", "theme_label": string }
-- challenge_card: { "type": "challenge_card", "title": string, "target_challenge": string, "icon": string, "strengths": string[] }
-- breathing_engine: { "type": "breathing_engine", "technique": string, "location": string, "audio_anchor": string }
-- tactile_sound_pad: { "type": "tactile_sound_pad", "title": string, "subtitle": string, "buttons": [{"label": string, "icon": "audio"|"music"|"check"}] }
-- card, row, column, text, icon, button, glow_ring, spacer
-
-Return a root JSON object: { "type": "column", "children": [...] } tailored to the prompt.
-''';
-
-      final response = await http.post(
-        Uri.parse(_groqEndpoint),
-        headers: {
-          'Authorization': 'Bearer $_groqApiKey',
-          'Content-Type': 'application/json',
-        },
-        body: jsonEncode({
-          'model': 'llama-3.3-70b-versatile',
-          'response_format': {'type': 'json_object'},
-          'temperature': 0.5,
-          'messages': [
-            {'role': 'system', 'content': systemPrompt},
-            {'role': 'user', 'content': 'Generate a personalized accessibility UI layout for: $prompt'}
-          ],
-        }),
-      ).timeout(const Duration(seconds: 8));
-
-      if (response.statusCode == 200) {
-        final bodyJson = jsonDecode(response.body) as Map<String, dynamic>;
-        final choices = bodyJson['choices'] as List?;
-        if (choices != null && choices.isNotEmpty) {
-          final contentStr = choices[0]['message']['content'] as String;
-          final schema = jsonDecode(contentStr) as Map<String, dynamic>;
-          debugPrint('[AiEdgeService] Successfully received dynamic Groq AI schema');
-          return schema;
-        }
-      }
-    } catch (e) {
-      debugPrint('[AiEdgeService] Groq API call error: $e. Falling back to local rules engine.');
-    }
-
-    // Fallback schema generator if offline or network error occurs
+    debugPrint('[AiEdgeService] Using local Gen-UI schema.');
     return _getLocalFallbackSchema(prompt);
   }
 

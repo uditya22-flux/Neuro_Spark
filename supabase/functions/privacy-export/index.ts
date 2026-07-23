@@ -72,6 +72,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
     let sessions: unknown[] = [];
     let intakes: unknown[] = [];
     let sensoryConfigs: unknown[] = [];
+    let explorationPreferences: unknown[] = [];
     let purgeRequests: unknown[] = [];
     let engine2: Record<string, unknown[]> = {
       layer1Sessions: [],
@@ -99,6 +100,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
         consistencyRes,
         profileRes,
         stage3HandoffRes,
+        preferencesRes,
       ] = await Promise.all([
         db.from("sessions").select(
           "id, child_id, expires_at, revoked_at, created_at",
@@ -137,10 +139,14 @@ Deno.serve(async (req: Request): Promise<Response> => {
         db.from("stage3_handoffs").select(
           "id, session_id, child_id, vertical_id, deepening_profile, telemetry_reference, created_at",
         ).in("child_id", resolvedChildIds),
+        db.from("guardian_exploration_preferences").select(
+          "child_id, configuration, expires_at, created_at, updated_at",
+        ).in("child_id", resolvedChildIds),
       ]);
       sessions = sessRes.data ?? [];
       intakes = intakeRes.data ?? [];
       sensoryConfigs = sensoryRes.data ?? [];
+      explorationPreferences = preferencesRes.data ?? [];
       engine2 = {
         layer1Sessions: layer1Res.data ?? [],
         stage2Handoffs: handoffRes.data ?? [],
@@ -171,6 +177,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
       // Only redacted intake text is included
       discoveryIntakes: intakes,
       sensoryConfigurations: sensoryConfigs,
+      explorationPreferences,
       engine2,
       purgeRequests,
       // adult_exploratory_note: intentionally omitted from export for child-safety compliance

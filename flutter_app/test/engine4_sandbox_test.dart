@@ -7,7 +7,7 @@ import 'package:mindbridge_app/features/sandbox/models/sandbox_attempt.dart';
 import 'package:mindbridge_app/features/sandbox/presentation/engine4_sandbox_screen.dart';
 
 void main() {
-  group('Engine 4 Skill-Building Sandbox Tests', () {
+  group('Open-ended play workshop tests', () {
     test('ProceduralPuzzleGenerator timeline puzzle generates scrambled blocks', () {
       final blocks = ProceduralPuzzleGenerator.generateTimelinePuzzle(
         count: 5,
@@ -70,10 +70,10 @@ void main() {
 
       await tester.pumpAndSettle();
 
-      expect(find.text('Skill-Building Sandbox'), findsOneWidget);
-      expect(find.text('Calendar Track'), findsOneWidget);
-      expect(find.text('Spatial Track'), findsOneWidget);
-      expect(find.textContaining('Calendar Genius Sandbox'), findsOneWidget);
+      expect(find.text('Open-ended play workshop'), findsOneWidget);
+      expect(find.text('Timeline workshop'), findsOneWidget);
+      expect(find.text('Constellation workshop'), findsOneWidget);
+      expect(find.textContaining('Timeline workshop'), findsWidgets);
     });
   });
 }

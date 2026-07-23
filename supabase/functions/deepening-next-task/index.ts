@@ -18,13 +18,14 @@ import {
   createTask,
   layerProtocol,
   loadEngine1Config,
-  pathForIsolation,
-  pathLayers,
-  type PathType,
   publicTask,
   requiredExecutions,
+  SECTORS,
+  type SectorId,
+  survivingSectorsForLayer,
+  TRACKS,
+  type TrackId,
   type VerticalId,
-  VERTICALS,
 } from "../_shared/engine2.ts";
 
 type ProgressState = Record<string, unknown>;
@@ -34,101 +35,27 @@ const asNumber = (value: unknown): number => {
   return Number.isFinite(number) ? number : 0;
 };
 
-const asStringArray = (value: unknown): string[] =>
-  Array.isArray(value)
-    ? value.filter((item): item is string => typeof item === "string")
-    : [];
-
-async function ensureProgressionStates(
+async function createOrLoadTaskForDomain(
   svc: ReturnType<typeof import("../_shared/auth.ts").buildServiceClient>,
   sessionId: string,
   childId: string,
-  activeVerticals: VerticalId[],
-): Promise<void> {
-  const [
-    { data: existing, error: stateError },
-    { data: handoffs, error: handoffError },
-  ] = await Promise.all([
-    svc.from("layer_progression_state").select("vertical_id").eq(
-      "session_id",
-      sessionId,
-    ).eq("child_id", childId),
-    svc.from("stage2_handoffs").select("vertical_id, isolation_score, recovery")
-      .eq("session_id", sessionId).eq("child_id", childId),
-  ]);
-  if (stateError || handoffError) {
-    throw new Error("Deepening state could not be read.");
-  }
-
-  const existingVerticals = new Set(
-    (existing ?? []).map((row: { vertical_id: string }) => row.vertical_id),
-  );
-  const handoffByVertical = new Map(
-    (handoffs ?? []).map((
-      row: Record<string, unknown>,
-    ) => [row.vertical_id as string, row]),
-  );
-
-  for (const verticalId of activeVerticals) {
-    if (existingVerticals.has(verticalId)) continue;
-    const handoff = handoffByVertical.get(verticalId);
-    if (!handoff) {
-      throw new Error("Layer 1 handoff is required for every active vertical.");
-    }
-    const isolationScore = asNumber(handoff.isolation_score);
-    const recovery = asNumber(handoff.recovery);
-    const path = pathForIsolation(isolationScore, recovery);
-    const layers = pathLayers(path);
-    const pathHistory = [{
-      layer: 1,
-      path,
-      reason: "Layer 1 isolation score selected the initial route.",
-      isolation_score: isolationScore,
-      created_at: new Date().toISOString(),
-    }];
-    const { error } = await svc.from("layer_progression_state").insert({
-      session_id: sessionId,
-      child_id: childId,
-      vertical_id: verticalId,
-      current_layer: layers[0],
-      path_type: path,
-      path_layers: layers,
-      path_history: pathHistory,
-      completed_layers: [],
-      status: "in_progress",
-      support_level: 0,
-    });
-    if (error && !String(error.message).includes("duplicate")) {
-      throw new Error("Deepening state could not be initialized.");
-    }
-  }
-}
-
-async function createOrLoadTask(
-  svc: ReturnType<typeof import("../_shared/auth.ts").buildServiceClient>,
+  domainId: VerticalId,
+  layer: number,
   state: ProgressState,
   config: Awaited<ReturnType<typeof loadEngine1Config>>,
 ): Promise<Record<string, unknown>> {
-  const sessionId = String(state.session_id);
-  const childId = String(state.child_id);
-  const verticalId = state.vertical_id as VerticalId;
-  const layer = asNumber(state.current_layer);
   const { data: existing, error: existingError } = await svc
     .from("vertical_task_bank")
     .select("*")
     .eq("session_id", sessionId)
     .eq("child_id", childId)
-    .eq("vertical_id", verticalId)
+    .eq("vertical_id", domainId)
     .eq("layer_number", layer)
     .eq("active", true)
     .maybeSingle();
+
   if (existingError) throw new Error("Deepening task could not be read.");
   if (existing) {
-    if (state.current_task_id !== existing.id) {
-      await svc.from("layer_progression_state").update({
-        current_task_id: existing.id,
-      }).eq("id", state.id);
-    }
     return existing as Record<string, unknown>;
   }
 
@@ -136,7 +63,7 @@ async function createOrLoadTask(
     .from("layer_task_execution")
     .select("accuracy, recovery, engagement, latency_ms")
     .eq("session_id", sessionId)
-    .eq("vertical_id", verticalId)
+    .eq("vertical_id", domainId)
     .order("created_at", { ascending: false })
     .limit(3);
   const recent = previousExecutions?.[0] as Record<string, unknown> | undefined;
@@ -148,23 +75,23 @@ async function createOrLoadTask(
       speed: Math.max(0, 1 - asNumber(recent.latency_ms) / 60_000),
     }
     : undefined;
+
   const task = await createTask(
-    verticalId,
+    domainId,
     layer,
-    `${sessionId}:${verticalId}:${layer}`,
+    `${sessionId}:${domainId}:${layer}`,
     config,
     "visual",
     undefined,
     previousScore,
   );
 
-  // Layer 8 deliberately reuses the previous activity rather than introducing
-  // a new task type. Only instrumentation metadata changes.
+  // Layer 8 deliberate signal collector reuse
   if (layer === 8) {
     const { data: priorTask } = await svc.from("vertical_task_bank")
       .select("item_payload, rule_version")
       .eq("session_id", sessionId)
-      .eq("vertical_id", verticalId)
+      .eq("vertical_id", domainId)
       .lt("layer_number", 8)
       .order("layer_number", { ascending: false })
       .limit(1)
@@ -177,9 +104,9 @@ async function createOrLoadTask(
       >;
       task.payload = {
         ...oldPublic,
-        objective: "strategy signals",
+        objective: "strategy signals instrumentation",
         instrumentation_only: true,
-        layer_protocol: layerProtocol(verticalId, 8),
+        layer_protocol: layerProtocol(domainId, 8),
         reused_from_layer: 7,
       };
       task.answerKey = (oldPayload.answer_key ?? {}) as Record<string, unknown>;
@@ -188,18 +115,19 @@ async function createOrLoadTask(
   }
 
   const hash = await contentHash({
-    verticalId,
+    verticalId: domainId,
     layer,
     public: task.payload,
     answer: task.answerKey,
     composition: task.composition,
   });
+
   const { data: inserted, error: insertError } = await svc.from(
     "vertical_task_bank",
   ).insert({
     child_id: childId,
     session_id: sessionId,
-    vertical_id: verticalId,
+    vertical_id: domainId,
     layer_number: layer,
     source_type: task.sourceType,
     difficulty_tier: task.difficultyTier,
@@ -211,26 +139,23 @@ async function createOrLoadTask(
     content_hash: hash,
     rule_version: task.ruleVersion,
   }).select("*").maybeSingle();
+
   if (inserted) {
-    await svc.from("layer_progression_state").update({
-      current_task_id: inserted.id,
-    }).eq("id", state.id);
     return inserted as Record<string, unknown>;
   }
+
   const { data: concurrent } = await svc.from("vertical_task_bank")
     .select("*")
     .eq("session_id", sessionId)
-    .eq("vertical_id", verticalId)
+    .eq("vertical_id", domainId)
     .eq("layer_number", layer)
     .eq("active", true)
     .maybeSingle();
+
   if (!concurrent) {
-    console.error("[deepening-next-task] task insert:", insertError?.message);
+    console.error("[deepening-next-task] task insert error:", insertError?.message);
     throw new Error("Deepening task could not be created.");
   }
-  await svc.from("layer_progression_state").update({
-    current_task_id: concurrent.id,
-  }).eq("id", state.id);
   return concurrent as Record<string, unknown>;
 }
 
@@ -267,22 +192,18 @@ Deno.serve(async (req: Request): Promise<Response> => {
     }
 
     const config = await loadEngine1Config(db, guardianId, childId);
-    await ensureProgressionStates(
-      svc,
-      sessionId,
-      childId,
-      config.activeVerticals,
-    );
-    const { data: states, error: stateError } = await svc.from(
+
+    const { data: state, error: stateError } = await svc.from(
       "layer_progression_state",
     )
       .select("*")
       .eq("session_id", sessionId)
       .eq("child_id", childId)
       .eq("status", "in_progress")
-      .order("vertical_id");
+      .maybeSingle();
+
     if (stateError) throw new Error("Deepening state could not be read.");
-    if (!states || states.length === 0) {
+    if (!state) {
       return ok({
         status: "funnel_complete",
         session_id: sessionId,
@@ -290,24 +211,58 @@ Deno.serve(async (req: Request): Promise<Response> => {
       });
     }
 
+    const currentLayer = asNumber(state.current_layer);
+    const trackAffinity = (state.track_affinity ?? {}) as Record<string, unknown>;
+    const gap = asNumber(trackAffinity.gap ?? 1.0);
+    const isAmbiguous = trackAffinity.isAmbiguous === true || gap <= 0.15;
+    const leaderTrack = (trackAffinity.leader as TrackId) ?? "calendar_genius";
+
+    let targetDomains: VerticalId[] = [];
+
+    if (currentLayer >= 10) {
+      if (isAmbiguous) {
+        // Layer 10 explicit decider round: side-by-side tasks from both production tracks
+        targetDomains = ["calendar_genius", "constellation_mapper"];
+        if (!state.decider_required) {
+          await svc.from("layer_progression_state").update({ decider_required: true }).eq("id", state.id);
+        }
+      } else {
+        // Clear lead: run real-world confirmation task for winning track
+        targetDomains = [leaderTrack];
+      }
+    } else {
+      // Layers 2–9: issue tasks for active surviving sectors
+      const activeSectors = Array.isArray(state.active_sectors)
+        ? (state.active_sectors as SectorId[])
+        : survivingSectorsForLayer(currentLayer, [...SECTORS] as SectorId[]);
+      targetDomains = activeSectors;
+    }
+
     const verticals: Record<string, unknown>[] = [];
-    for (const state of states as ProgressState[]) {
-      const task = await createOrLoadTask(svc, state, config);
-      const { count, error: countError } = await svc.from(
-        "layer_task_execution",
-      )
+    for (const domain of targetDomains) {
+      const task = await createOrLoadTaskForDomain(
+        svc,
+        sessionId,
+        childId,
+        domain,
+        currentLayer,
+        state as ProgressState,
+        config,
+      );
+      const { count } = await svc.from("layer_task_execution")
         .select("id", { count: "exact", head: true })
         .eq("session_id", sessionId)
         .eq("task_id", task.id);
-      if (countError) throw new Error("Task progress could not be read.");
+
       const executionIndex = Math.min(
-        requiredExecutions(asNumber(task.layer_number)),
+        requiredExecutions(currentLayer),
         (count ?? 0) + 1,
       );
+
       verticals.push(publicTask(task, {
         supportLevel: asNumber(state.support_level),
         executionIndex,
-        requiredExecutions: requiredExecutions(asNumber(task.layer_number)),
+        requiredExecutions: requiredExecutions(currentLayer),
       }));
     }
 
@@ -317,10 +272,17 @@ Deno.serve(async (req: Request): Promise<Response> => {
       childId,
       meta: {
         session_id: sessionId,
-        verticals: verticals.map((task) => task.vertical_id),
+        layer: currentLayer,
+        target_domains: targetDomains,
       },
     });
-    return ok({ status: "in_progress", session_id: sessionId, verticals });
+
+    return ok({
+      status: "in_progress",
+      session_id: sessionId,
+      current_layer: currentLayer,
+      verticals,
+    });
   } catch (error) {
     if (error instanceof ValidationError) return badRequest(error.message);
     console.error(

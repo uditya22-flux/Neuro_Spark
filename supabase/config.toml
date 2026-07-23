@@ -1,5 +1,38 @@
 project_id = "mindbridge"
 
+# The synthetic cloud Engine 2 showcase uses a temporary anonymous Supabase
+# identity. It is a demo-only account path; the Edge Function accepts only
+# anonymous identities and only allowlisted fictional scene settings.
+[auth]
+site_url = "http://localhost:3000"
+additional_redirect_urls = ["io.supabase.neurospark://login-callback/"]
+enable_signup = true
+enable_manual_linking = false
+enable_anonymous_sign_ins = true
+
+[auth.mfa.totp]
+enroll_enabled = true
+verify_enabled = true
+
+[auth.email]
+enable_signup = true
+double_confirm_changes = true
+enable_confirmations = true
+max_frequency = "1m0s"
+otp_length = 8
+
+# CAPTCHA would require a visible challenge and token. It remains off only for
+# this short-lived fictional demo path; re-enable it before a public release.
+[auth.captcha]
+enabled = false
+
+# Keep this free-tier project on the existing non-vector storage setting when
+# the CLI synchronises the configuration.
+[storage.vector]
+enabled = false
+max_buckets = 10
+max_indexes = 5
+
 [functions.create-child]
 verify_jwt = true
 [functions.submit-intake]
@@ -37,4 +70,21 @@ verify_jwt = true
 [functions.deepening-progress]
 verify_jwt = true
 [functions.deepening-profile]
+verify_jwt = true
+
+[functions.generate-visual-scene]
+enabled = true
+verify_jwt = true
+import_map = "./functions/generate-visual-scene/deno.json"
+# Uncomment to specify a custom file path to the entrypoint.
+# Supported file extensions are: .ts, .js, .mjs, .jsx, .tsx
+entrypoint = "./functions/generate-visual-scene/index.ts"
+# Specifies static files to be bundled with the function. Supports glob patterns.
+# For example, if you want to serve static HTML pages in your function:
+# static_files = [ "./functions/generate-visual-scene/*.html" ]
+
+[functions.generate-demo-visual-scene]
+verify_jwt = true
+
+[functions.synthetic-engine2-next-task]
 verify_jwt = true

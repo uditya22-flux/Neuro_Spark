@@ -1,11 +1,20 @@
+import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 /// Guardian authentication is Supabase Auth; no bespoke verify-parent API exists.
 class SupabaseAuthRepository {
+  static const _androidMagicLinkCallback =
+      'io.supabase.neurospark://login-callback/';
+
   SupabaseClient get _client => Supabase.instance.client;
 
   Future<void> sendEmailOtp(String email) =>
-      _client.auth.signInWithOtp(email: email);
+      _client.auth.signInWithOtp(
+        email: email,
+        // The custom Android URI reopens this app after the guardian taps the
+        // Supabase magic link. On web, Supabase uses the configured Site URL.
+        emailRedirectTo: kIsWeb ? null : _androidMagicLinkCallback,
+      );
 
   Future<void> sendPhoneOtp(String phone) =>
       _client.auth.signInWithOtp(phone: phone);

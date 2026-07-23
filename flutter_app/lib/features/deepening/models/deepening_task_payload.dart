@@ -4,7 +4,8 @@ class DeepeningTaskPayload {
   final String sessionId;
   final int layer;
   final int totalLayers;
-  final String verticalId; // 'calendar_genius' or 'constellation_mapper'
+  final String verticalId; // 'calendar_genius', 'constellation_mapper', or sector ID
+  final String sectorId;
   final String themeSkin; // 'cosmic_space', 'sage_green', 'pastel_dinosaur', 'terracotta_train'
   final String prompt;
   final Map<String, dynamic> taskData;
@@ -23,6 +24,7 @@ class DeepeningTaskPayload {
     required this.layer,
     this.totalLayers = 10,
     required this.verticalId,
+    this.sectorId = '',
     required this.themeSkin,
     required this.prompt,
     required this.taskData,
@@ -36,15 +38,18 @@ class DeepeningTaskPayload {
   });
 
   factory DeepeningTaskPayload.fromJson(Map<String, dynamic> json) {
+    final vId = json['vertical_id'] as String? ?? 'pattern_recognition';
+    final sId = json['sector_id'] as String? ?? vId;
     return DeepeningTaskPayload(
       taskId: json['task_id'] as String? ?? 'task_${DateTime.now().millisecondsSinceEpoch}',
       userId: json['user_id'] as String? ?? '',
       sessionId: json['session_id'] as String? ?? '',
       layer: json['layer'] as int? ?? 1,
       totalLayers: json['total_layers'] as int? ?? 10,
-      verticalId: json['vertical_id'] as String? ?? 'calendar_genius',
+      verticalId: vId,
+      sectorId: sId,
       themeSkin: json['theme_skin'] as String? ?? 'cosmic_space',
-      prompt: json['prompt'] as String? ?? 'Solve the adaptive puzzle below',
+      prompt: json['prompt'] as String? ?? 'Explore the continuous motion probe below',
       taskData: json['task_data'] as Map<String, dynamic>? ?? {},
       sourceType: json['source_type'] as String? ?? 'created',
       modality: json['modality'] as String? ?? 'visual',
@@ -63,6 +68,7 @@ class DeepeningTaskPayload {
         'layer': layer,
         'total_layers': totalLayers,
         'vertical_id': verticalId,
+        'sector_id': sectorId.isNotEmpty ? sectorId : verticalId,
         'theme_skin': themeSkin,
         'prompt': prompt,
         'task_data': taskData,
