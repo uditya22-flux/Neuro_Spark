@@ -140,7 +140,14 @@ class DeepeningController extends StateNotifier<DeepeningState> {
 
   Future<void> _fetchDeepeningTask(String childId, String? ignoredVerticalId) async {
     final sessionId = state.sessionId;
-    if (sessionId == null) return;
+    if (sessionId == null) {
+      _pendingResponseId = null;
+      state = state.copyWith(
+        currentTask: _generateFallbackTask(childId, state.currentLayer),
+        isLoading: false,
+      );
+      return;
+    }
     state = state.copyWith(isLoading: true, errorMessage: null);
     _latencyStopwatch..reset()..start();
     final client = _client;
@@ -281,7 +288,7 @@ class DeepeningController extends StateNotifier<DeepeningState> {
     if (_layer1Queue.isNotEmpty) {
       _showLayer1Task(_layer1Queue.first);
     } else {
-      if (_client != null) {
+      if (_client != null && state.sessionId != null) {
         state = state.copyWith(isSubmitting: false, currentTask: null);
         await _fetchDeepeningTask(userId, null);
       } else {
