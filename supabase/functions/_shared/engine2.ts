@@ -146,8 +146,10 @@ export function pathLayers(path: PathType): number[] {
 }
 
 export function requiredExecutions(layer: number): number {
-  if (layer === 1) return 30;
-  return 10;
+  if (layer === 1) return 30; // Baseline Discovery
+  if (layer === 4) return 4;  // Speed vs Accuracy (same item 4 times)
+  if (layer === 9) return 5;  // Consistency sliding window
+  return 1;                   // Regular layers only need 1 task to proceed
 }
 
 export function modalityForExecution(
