@@ -1122,6 +1122,94 @@ function applyLayerProtocol(
   return task;
 }
 
+async function generateTaskWithLLM(
+  verticalId: VerticalId,
+  layer: number,
+  difficulty: "baseline" | "progressive" | "advanced",
+  theme: string,
+  modality: Modality,
+): Promise<TaskCandidate | null> {
+  const provider = Deno.env.get("TASK_LLM_PROVIDER") ?? "deterministic";
+  const apiKey = Deno.env.get("OPENAI_API_KEY");
+  if (provider !== "openai" || !apiKey) return null;
+
+  try {
+    const response = await fetch(
+      Deno.env.get("OPENAI_BASE_URL") ??
+        "https://api.openai.com/v1/chat/completions",
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model: Deno.env.get("OPENAI_MODEL") ?? "gpt-4o-mini",
+          temperature: 0.7,
+          response_format: { type: "json_object" },
+          messages: [
+            {
+              role: "system",
+              content: `You are an expert educational task generator. Generate a single task payload for a child under the theme "${theme}".
+Output JSON only:
+{
+  "prompt": "Clear, friendly question or instructions tailored for the layer and theme",
+  "task_data": { ...any extra fields required by the client for layout, e.g. target_date, options list, required_stars... },
+  "expected": "The exact expected correct answer (must match the expected type, e.g. 'Monday', or a number, or option string)"
+}`
+            },
+            {
+              role: "user",
+              content: JSON.stringify({
+                vertical_id: verticalId,
+                layer,
+                difficulty,
+                theme,
+                modality,
+                instructions: verticalId === "calendar_genius"
+                  ? "Generate a calendar question. Return target_date (YYYY-MM-DD format) inside task_data. The prompt must ask for the day of the week for that date. The expected answer must be the day name (e.g. 'Monday'). Make it progressively harder for higher layers."
+                  : verticalId === "constellation_mapper"
+                  ? "Generate a star connection challenge. Return required_stars (number, e.g. 4) and total_star_nodes (number, e.g. 6) in task_data. The prompt must guide the user to select the stars. The expected answer is null (handled client-side)."
+                  : "Generate a custom multiple choice question for a child, themed to the focus area. Return a list of 'options' (array of strings) inside task_data. The expected answer must be one of the options."
+              })
+            }
+          ]
+        })
+      }
+    );
+
+    if (!response.ok) return null;
+    const json = await response.json();
+    const raw = json?.choices?.[0]?.message?.content;
+    const data = JSON.parse(raw);
+
+    return {
+      verticalId,
+      layer,
+      sourceType: "created",
+      difficultyTier: difficulty,
+      modality,
+      payload: {
+        kind: verticalId === "calendar_genius"
+          ? "calendar-order"
+          : verticalId === "constellation_mapper"
+          ? "constellation-nodes"
+          : "choice-pattern",
+        prompt: data.prompt,
+        theme_skin: theme,
+        modality,
+        objective: layerObjective(layer),
+        ...data.task_data,
+      },
+      answerKey: { expected: data.expected },
+      ruleVersion: `llm-v1-layer-${layer}`,
+    };
+  } catch (e) {
+    console.error(`[engine2:generateTaskWithLLM] Error:`, e);
+    return null;
+  }
+}
+
 export async function createTask(
   verticalId: VerticalId,
   layer: number,
@@ -1153,25 +1241,36 @@ export async function createTask(
   }
   const theme = config.hyperFocusTheme ||
     (choice.id === "calm-visual" ? "calm" : "general");
-  const task = verticalId === "discovery"
-    ? discoveryTask(
-      layer,
-      seed,
-      theme,
-      normalizeModality(choice.modality),
-      previousScore,
-    )
-    : verticalId === "calendar_genius"
-    ? calendarTask(layer, seed, theme, normalizeModality(choice.modality))
-    : verticalId === "constellation_mapper"
-    ? constellationTask(layer, seed, theme, normalizeModality(choice.modality))
-    : genericVerticalTask(
-      verticalId,
-      layer,
-      seed,
-      theme,
-      normalizeModality(choice.modality),
-    );
+  
+  let task = await generateTaskWithLLM(
+    verticalId,
+    layer,
+    choice.difficulty,
+    theme,
+    normalizeModality(choice.modality),
+  );
+
+  if (!task) {
+    task = verticalId === "discovery"
+      ? discoveryTask(
+        layer,
+        seed,
+        theme,
+        normalizeModality(choice.modality),
+        previousScore,
+      )
+      : verticalId === "calendar_genius"
+      ? calendarTask(layer, seed, theme, normalizeModality(choice.modality))
+      : verticalId === "constellation_mapper"
+      ? constellationTask(layer, seed, theme, normalizeModality(choice.modality))
+      : genericVerticalTask(
+        verticalId,
+        layer,
+        seed,
+        theme,
+        normalizeModality(choice.modality),
+      );
+  }
   const baseline = CURATED_BASELINES[verticalId];
   const protocol = layerProtocol(verticalId, layer);
   task.composition = {
