@@ -10,6 +10,8 @@ import 'package:mindbridge_app/features/exploration/services/layer1_generator.da
 import 'package:mindbridge_app/features/exploration/services/layer1_catalog.dart';
 import 'package:mindbridge_app/features/exploration/services/play_routing_score_calculator.dart';
 import 'package:mindbridge_app/features/exploration/services/synthetic_demo_scene_mapper.dart';
+import 'package:mindbridge_app/features/deepening/presentation/deepening_funnel_canvas.dart'
+    show taskAutoAdvanceAfterInactivity;
 
 void main() {
   const intake = IntakeConfiguration(
@@ -376,6 +378,48 @@ void main() {
     expect(result.recovery, 1);
     expect(result.engagement, 1);
     expect(result.speed, .5);
+  });
+
+  test('a two-minute no-response item remains incomplete but cannot stall the flow',
+      () {
+    const skipped = PlayObservation(
+      mechanics: [PlayMechanic.selectiveAttention],
+      layer: 1,
+      expectedInteractions: 1,
+      speedBudgetMs: 18000,
+      telemetry: ExplorationTelemetry(
+        activeLatencyMs: 6000,
+        misclicks: 0,
+        recoveredErrors: 0,
+        interactions: 0,
+        correctInteractions: 0,
+      ),
+    );
+    final result = PlayRoutingScoreCalculator.fromObservation(skipped);
+
+    // No response has no accuracy, recovery, or engagement contribution.
+    // The six seconds of active time retained before the Support Ladder pause
+    // supplies only the small speed component, well below the 60-point bar.
+    expect(result.score, closeTo(6.6667, .001));
+    expect(result.score, lessThan(BuilderSurvivorSelector.continuationScoreThreshold));
+    expect(taskAutoAdvanceAfterInactivity, const Duration(minutes: 2));
+
+    final next = BuilderSurvivorSelector.selectForNextLayer(
+      completedLayer: 1,
+      latestLayerResults: [
+        result,
+        const PlayRoutingResult(
+          mechanic: PlayMechanic.mapRouteNavigation,
+          score: 82,
+          accuracy: 1,
+          recovery: 1,
+          engagement: 1,
+          speed: .2,
+          supportLevelUsed: 0,
+        ),
+      ],
+    );
+    expect(next, equals([PlayMechanic.mapRouteNavigation]));
   });
 
   test('a weak Layer 1 still keeps the strongest response moving', () {

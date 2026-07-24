@@ -33,9 +33,16 @@ class PlayRoutingScoreCalculator {
     final expected =
         observation.expectedInteractions.clamp(1, 1 << 30).toDouble();
     final accuracy = _unit(telemetry.correctInteractions / interactions);
-    final recovery = telemetry.misclicks == 0
-        ? 1.0
-        : _unit(telemetry.recoveredErrors / telemetry.misclicks);
+    // A completed interaction with no error is fully recovered by definition.
+    // An entirely unanswered item is different: it has no correction signal,
+    // so it receives no recovery credit when auto-advanced after inactivity.
+    final noResponse =
+        telemetry.interactions == 0 && telemetry.correctInteractions == 0;
+    final recovery = noResponse
+        ? 0.0
+        : telemetry.misclicks == 0
+            ? 1.0
+            : _unit(telemetry.recoveredErrors / telemetry.misclicks);
     final engagement = _unit(telemetry.interactions / expected);
     final speed = _unit(1 -
         telemetry.activeLatencyMs /

@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mindbridge_app/features/exploration/models/exploration_models.dart';
 import 'package:mindbridge_app/features/exploration/models/synthetic_engine2_models.dart';
+import 'package:mindbridge_app/features/exploration/models/visual_scene_spec.dart';
 
 void main() {
   test('start request keeps guardian free text out of the cloud payload', () {
@@ -78,6 +79,46 @@ void main() {
     expect(jsonEncode(payload), isNot(contains('correct_option')));
   });
 
+  test(
+    'inactivity skip sends no answer and stays within server telemetry bounds',
+    () {
+      const task = PuzzleSpec(
+        id: 'task_1',
+        mechanics: [PlayMechanic.chronologicalSequencing],
+        layer: 2,
+        themedPrompt: '',
+        options: ['option_a', 'option_b', 'option_c'],
+        correctOption: 'option_b',
+        itemCount: 3,
+      );
+      const telemetry = ExplorationTelemetry(
+        activeLatencyMs: 700000,
+        misclicks: 99,
+        recoveredErrors: 99,
+        interactions: 0,
+        correctInteractions: 0,
+      );
+
+      final payload = SyntheticEngine2SkipRequest.fromInactivity(
+        sessionId: 'session_1',
+        task: task,
+        telemetry: telemetry,
+        supportLevel: 9,
+      ).toJson();
+
+      expect(payload['action'], 'skip');
+      expect(payload.containsKey('option_id'), isFalse);
+      expect(payload['telemetry'], {
+        'latency_ms': 600000,
+        'misclicks': 1,
+        'recovered_errors': 1,
+        'interactions': 1,
+        'support_level': 3,
+      });
+      expect(jsonEncode(payload), isNot(contains('correct_option')));
+    },
+  );
+
   test('response parser returns the generated puzzle and a soft-miss state', () {
     final result = SyntheticEngine2Result.fromJson({
       'status': 'in_progress',
@@ -100,6 +141,39 @@ void main() {
       'next_task': <String, dynamic>{},
     });
     expect(invalidSoftMiss.status, SyntheticEngine2Status.unavailable);
+
+    final skippedWithNextTask = SyntheticEngine2Result.fromJson({
+      'status': 'in_progress',
+      'session_id': 'session_1',
+      'current_layer': 1,
+      'active_sectors': ['chronologicalSequencing'],
+      'solved': false,
+      'skipped': true,
+      'next_task': <String, dynamic>{
+        'id': 'task_2',
+        'sector': 'chronologicalSequencing',
+        'layer': 1,
+        'options': ['option_a', 'option_b'],
+        'correct_option': 'option_b',
+      },
+    });
+    expect(skippedWithNextTask.isSkipped, isTrue);
+    expect(skippedWithNextTask.isUnsolved, isFalse);
+    expect(skippedWithNextTask.hasNextTask, isTrue);
+
+    final skippedCompletion = SyntheticEngine2Result.fromJson({
+      'status': 'complete',
+      'session_id': 'session_1',
+      'current_layer': 10,
+      'active_sectors': ['chronologicalSequencing'],
+      'final_sector': 'chronologicalSequencing',
+      'sandbox': 'calendar',
+      'solved': false,
+      'skipped': true,
+    });
+    expect(skippedCompletion.isComplete, isTrue);
+    expect(skippedCompletion.isSkipped, isTrue);
+    expect(skippedCompletion.isSolved, isFalse);
 
     final issuedTask = SyntheticEngine2Result.fromJson({
       'status': 'in_progress',

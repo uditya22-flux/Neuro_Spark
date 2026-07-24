@@ -15,7 +15,7 @@ import 'intake_provider.dart';
 enum ExplorationPhase { idle, ambientBaseline, deepening, complete }
 
 /// Result of one server-validated visual option in synthetic cloud mode.
-enum SyntheticCloudChoiceResult { solved, softMiss, unavailable }
+enum SyntheticCloudChoiceResult { solved, skipped, softMiss, unavailable }
 
 class SupportLadderState {
   final int level;
@@ -245,6 +245,40 @@ class ExplorationFunnelController
     _completeStandardFlow(task, observations);
   }
 
+  /// Advances after a long period without interaction. A skipped activity is
+  /// deliberately not converted into a correct response: it retains zero
+  /// correct interactions, so the existing response-signal calculation can
+  /// treat it as incomplete while the child sees no failure state.
+  void skipCurrentTask(ExplorationTelemetry telemetry) {
+    final task = state.currentTask;
+    if (task == null) return;
+    _inactivityTimer?.cancel();
+
+    final observations = [
+      ...state.sessionObservations,
+      PlayObservation(
+        mechanics: task.mechanics,
+        telemetry: telemetry,
+        layer: task.layer,
+        expectedInteractions: task.expectedInteractions,
+        speedBudgetMs: task.speedBudgetMs,
+        supportLevelUsed: state.support.level,
+      ),
+    ];
+
+    if (state.taskQueue.isNotEmpty) {
+      _showNextQueuedTask(observations);
+      return;
+    }
+
+    if (builderShowcaseMode) {
+      _completeBuilderLayer(observations);
+      return;
+    }
+
+    _completeStandardFlow(task, observations);
+  }
+
   /// Sends exactly one issued visual option to the anonymous cloud function.
   /// The function owns answer validation, synthetic persistence, scoring, and
   /// issuing the next OpenAI-generated puzzle specification.
@@ -281,6 +315,37 @@ class ExplorationFunnelController
     return result.isSolved || result.isComplete
         ? SyntheticCloudChoiceResult.solved
         : SyntheticCloudChoiceResult.unavailable;
+  }
+
+  /// Finalizes an issued synthetic task after the child has left it untouched
+  /// for the neutral inactivity interval. The server records it as skipped,
+  /// never as a correct answer, then issues the next task or completion.
+  Future<SyntheticCloudChoiceResult> skipSyntheticCloudTask({
+    required ExplorationTelemetry telemetry,
+  }) async {
+    final task = state.currentTask;
+    final sessionId = state.syntheticCloudSessionId;
+    if (!state.usesSyntheticCloud || task == null || sessionId == null) {
+      return SyntheticCloudChoiceResult.unavailable;
+    }
+
+    final result = await ref.read(syntheticEngine2ServiceProvider).skipTask(
+          sessionId: sessionId,
+          task: task,
+          telemetry: telemetry,
+          supportLevel: state.support.level,
+        );
+    if (result.status == SyntheticEngine2Status.unavailable ||
+        !result.isSkipped) {
+      state = state.copyWith(
+        error: result.reason ?? 'The synthetic cloud task could not advance.',
+      );
+      return SyntheticCloudChoiceResult.unavailable;
+    }
+
+    _inactivityTimer?.cancel();
+    _adoptSyntheticCloudResult(result);
+    return SyntheticCloudChoiceResult.skipped;
   }
 
   void _adoptSyntheticCloudResult(SyntheticEngine2Result result) {

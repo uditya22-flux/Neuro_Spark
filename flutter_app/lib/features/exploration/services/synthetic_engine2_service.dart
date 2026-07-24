@@ -45,6 +45,25 @@ class SyntheticEngine2Service {
     return _invoke(request.toJson());
   }
 
+  /// Finalizes the currently issued synthetic task after client-side
+  /// inactivity. The request contains only the issued opaque task context and
+  /// bounded aggregate telemetry; it never sends a reason or free-text input.
+  Future<SyntheticEngine2Result> skipTask({
+    required String sessionId,
+    required PuzzleSpec task,
+    required ExplorationTelemetry telemetry,
+    required int supportLevel,
+  }) async {
+    if (!_cloudSyntheticMode) return _disabledResult();
+    final request = SyntheticEngine2SkipRequest.fromInactivity(
+      sessionId: sessionId,
+      task: task,
+      telemetry: telemetry,
+      supportLevel: supportLevel,
+    );
+    return _invoke(request.toJson());
+  }
+
   Future<SyntheticEngine2Result> _invoke(Map<String, dynamic> body) async {
     if (!_cloudSyntheticMode) return _disabledResult();
 

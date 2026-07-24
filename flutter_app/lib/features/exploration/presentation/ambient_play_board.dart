@@ -21,6 +21,7 @@ class AmbientPlayBoard extends StatefulWidget {
     required this.scene,
     required this.highlightTarget,
     required this.onChoice,
+    this.onInteraction,
   });
 
   final PuzzleSpec task;
@@ -30,6 +31,10 @@ class AmbientPlayBoard extends StatefulWidget {
   /// is deliberately kept on this same surface so it can be corrected without
   /// a visible failure state.
   final FutureOr<bool> Function(String choice) onChoice;
+
+  /// Observes any touch or drag so the surrounding flow can reset its quiet
+  /// inactivity timer without adding child-facing controls or text.
+  final VoidCallback? onInteraction;
 
   @override
   State<AmbientPlayBoard> createState() => _AmbientPlayBoardState();
@@ -69,32 +74,38 @@ class _AmbientPlayBoardState extends State<AmbientPlayBoard> {
     });
   }
 
+  Widget _observeInteraction(Widget child) => Listener(
+        behavior: HitTestBehavior.translucent,
+        onPointerDown: (_) => widget.onInteraction?.call(),
+        child: child,
+      );
+
   @override
   Widget build(BuildContext context) {
     final task = widget.task;
     final singleMechanic =
         task.mechanics.length == 1 ? task.mechanics.single : null;
     if (SpatialTemporalInteractionBoard.supports(task)) {
-      return SpatialTemporalInteractionBoard(
+      return _observeInteraction(SpatialTemporalInteractionBoard(
         task: task,
         highlightTarget: widget.highlightTarget,
         onChoice: widget.onChoice,
-      );
+      ));
     }
     if (NonAudioMechanicBoard.supports(task)) {
-      return NonAudioMechanicBoard(
+      return _observeInteraction(NonAudioMechanicBoard(
         task: task,
         highlightTarget: widget.highlightTarget,
         onChoice: widget.onChoice,
-      );
+      ));
     }
     if (singleMechanic != null &&
         SocialCreativeInteractionBoard.supports(singleMechanic)) {
-      return SocialCreativeInteractionBoard(
+      return _observeInteraction(SocialCreativeInteractionBoard(
         task: task,
         highlightTarget: widget.highlightTarget,
         onChoice: widget.onChoice,
-      );
+      ));
     }
     final scene = widget.scene;
     final options = _visibleOptions(task, scene?.itemCount ?? task.itemCount);
@@ -120,7 +131,7 @@ class _AmbientPlayBoardState extends State<AmbientPlayBoard> {
       rule: plan?.rule,
     );
 
-    return Column(
+    return _observeInteraction(Column(
       mainAxisSize: MainAxisSize.min,
       children: [
         AnimatedContainer(
@@ -172,7 +183,7 @@ class _AmbientPlayBoardState extends State<AmbientPlayBoard> {
           ],
         ),
       ],
-    );
+    ));
   }
 
   List<String> _visibleOptions(PuzzleSpec task, int requestedCount) {

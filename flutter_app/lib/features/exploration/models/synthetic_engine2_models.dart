@@ -124,34 +124,7 @@ class SyntheticEngine2SelectionRequest {
     required ExplorationTelemetry telemetry,
     required int supportLevel,
   }) {
-    if (!_isOpaqueId(sessionId)) {
-      throw ArgumentError.value(
-        sessionId,
-        'sessionId',
-        'Must be an issued opaque session ID.',
-      );
-    }
-    if (!_isOpaqueId(task.id)) {
-      throw ArgumentError.value(
-        task.id,
-        'task.id',
-        'Must be an issued opaque task ID.',
-      );
-    }
-    if (task.mechanics.length != 1) {
-      throw ArgumentError.value(
-        task.mechanics,
-        'task.mechanics',
-        'A synthetic task must have one sector.',
-      );
-    }
-    if (task.layer < 1 || task.layer > 10) {
-      throw ArgumentError.value(
-        task.layer,
-        'task.layer',
-        'Must be between 1 and 10.',
-      );
-    }
+    _validateSyntheticTaskContext(sessionId: sessionId, task: task);
     final safeOption = _safeOption(optionId);
     if (safeOption == null || !task.options.contains(safeOption)) {
       throw ArgumentError.value(
@@ -160,17 +133,21 @@ class SyntheticEngine2SelectionRequest {
         'Must be an option issued for this synthetic task.',
       );
     }
+    final safeTelemetry = _SyntheticEngine2Telemetry.fromExploration(
+      telemetry,
+      supportLevel,
+    );
     return SyntheticEngine2SelectionRequest(
       sessionId: sessionId,
       taskId: task.id,
       sector: task.mechanics.single,
       layer: task.layer,
       optionId: safeOption,
-      latencyMs: _bounded(telemetry.activeLatencyMs, minimum: 0, maximum: 600000),
-      misclicks: _bounded(telemetry.misclicks, minimum: 0, maximum: 1000),
-      recoveredErrors: _bounded(telemetry.recoveredErrors, minimum: 0, maximum: 1000),
-      interactions: _bounded(telemetry.interactions, minimum: 1, maximum: 1000),
-      supportLevel: _bounded(supportLevel, minimum: 0, maximum: 3),
+      latencyMs: safeTelemetry.latencyMs,
+      misclicks: safeTelemetry.misclicks,
+      recoveredErrors: safeTelemetry.recoveredErrors,
+      interactions: safeTelemetry.interactions,
+      supportLevel: safeTelemetry.supportLevel,
     );
   }
 
@@ -191,6 +168,153 @@ class SyntheticEngine2SelectionRequest {
       };
 }
 
+/// Finalizes an issued synthetic task after an inactivity timeout. This is an
+/// enum/number-only payload: it deliberately has no answer, reason, or text
+/// field that could carry personal data to the synthetic cloud boundary.
+class SyntheticEngine2SkipRequest {
+  const SyntheticEngine2SkipRequest({
+    required this.sessionId,
+    required this.taskId,
+    required this.sector,
+    required this.layer,
+    required this.latencyMs,
+    required this.misclicks,
+    required this.recoveredErrors,
+    required this.interactions,
+    required this.supportLevel,
+  });
+
+  final String sessionId;
+  final String taskId;
+  final PlayMechanic sector;
+  final int layer;
+  final int latencyMs;
+  final int misclicks;
+  final int recoveredErrors;
+  final int interactions;
+  final int supportLevel;
+
+  factory SyntheticEngine2SkipRequest.fromInactivity({
+    required String sessionId,
+    required PuzzleSpec task,
+    required ExplorationTelemetry telemetry,
+    required int supportLevel,
+  }) {
+    _validateSyntheticTaskContext(sessionId: sessionId, task: task);
+    final safeTelemetry = _SyntheticEngine2Telemetry.fromExploration(
+      telemetry,
+      supportLevel,
+    );
+    return SyntheticEngine2SkipRequest(
+      sessionId: sessionId,
+      taskId: task.id,
+      sector: task.mechanics.single,
+      layer: task.layer,
+      latencyMs: safeTelemetry.latencyMs,
+      misclicks: safeTelemetry.misclicks,
+      recoveredErrors: safeTelemetry.recoveredErrors,
+      interactions: safeTelemetry.interactions,
+      supportLevel: safeTelemetry.supportLevel,
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+        'action': 'skip',
+        'session_id': sessionId,
+        'task_id': taskId,
+        'sector': sector.name,
+        'layer': layer,
+        'telemetry': {
+          'latency_ms': latencyMs,
+          'misclicks': misclicks,
+          'recovered_errors': recoveredErrors,
+          'interactions': interactions,
+          'support_level': supportLevel,
+        },
+      };
+}
+
+void _validateSyntheticTaskContext({
+  required String sessionId,
+  required PuzzleSpec task,
+}) {
+  if (!_isOpaqueId(sessionId)) {
+    throw ArgumentError.value(
+      sessionId,
+      'sessionId',
+      'Must be an issued opaque session ID.',
+    );
+  }
+  if (!_isOpaqueId(task.id)) {
+    throw ArgumentError.value(
+      task.id,
+      'task.id',
+      'Must be an issued opaque task ID.',
+    );
+  }
+  if (task.mechanics.length != 1) {
+    throw ArgumentError.value(
+      task.mechanics,
+      'task.mechanics',
+      'A synthetic task must have one sector.',
+    );
+  }
+  if (task.layer < 1 || task.layer > 10) {
+    throw ArgumentError.value(
+      task.layer,
+      'task.layer',
+      'Must be between 1 and 10.',
+    );
+  }
+}
+
+class _SyntheticEngine2Telemetry {
+  const _SyntheticEngine2Telemetry({
+    required this.latencyMs,
+    required this.misclicks,
+    required this.recoveredErrors,
+    required this.interactions,
+    required this.supportLevel,
+  });
+
+  final int latencyMs;
+  final int misclicks;
+  final int recoveredErrors;
+  final int interactions;
+  final int supportLevel;
+
+  factory _SyntheticEngine2Telemetry.fromExploration(
+    ExplorationTelemetry telemetry,
+    int supportLevel,
+  ) {
+    final interactions = _bounded(
+      telemetry.interactions,
+      minimum: 1,
+      maximum: 100,
+    );
+    final misclicks = _bounded(
+      telemetry.misclicks,
+      minimum: 0,
+      maximum: interactions < 50 ? interactions : 50,
+    );
+    return _SyntheticEngine2Telemetry(
+      latencyMs: _bounded(
+        telemetry.activeLatencyMs,
+        minimum: 0,
+        maximum: 600000,
+      ),
+      misclicks: misclicks,
+      recoveredErrors: _bounded(
+        telemetry.recoveredErrors,
+        minimum: 0,
+        maximum: misclicks,
+      ),
+      interactions: interactions,
+      supportLevel: _bounded(supportLevel, minimum: 0, maximum: 3),
+    );
+  }
+}
+
 enum SyntheticEngine2Status { inProgress, complete, unavailable }
 
 enum SyntheticEngine2Sandbox { calendar, constellation }
@@ -209,6 +333,7 @@ class SyntheticEngine2Result {
     this.finalSector,
     this.sandbox,
     this.solved,
+    this.skipped = false,
     this.reason,
   });
 
@@ -221,15 +346,18 @@ class SyntheticEngine2Result {
   final PlayMechanic? finalSector;
   final SyntheticEngine2Sandbox? sandbox;
   /// `false` means the server retained the current task after a soft miss;
-  /// `true` means it accepted the selection and may have issued a new task.
+  /// `true` means it accepted a correct selection and may have issued a new
+  /// task. A final inactivity skip is represented separately by [skipped].
   /// It is null for a newly started session.
   final bool? solved;
+  final bool skipped;
   final String? reason;
 
   bool get isInProgress => status == SyntheticEngine2Status.inProgress;
   bool get hasNextTask => nextTask != null;
   bool get isSolved => solved == true;
-  bool get isUnsolved => solved == false;
+  bool get isUnsolved => solved == false && !skipped && !hasNextTask;
+  bool get isSkipped => skipped;
   bool get isComplete => status == SyntheticEngine2Status.complete;
 
   factory SyntheticEngine2Result.unavailable(String reason) =>
@@ -241,6 +369,13 @@ class SyntheticEngine2Result {
   factory SyntheticEngine2Result.fromJson(Map<String, dynamic> json) {
     final rawStatus = json['status'];
     if (rawStatus == 'complete') {
+      final skipped = json['skipped'] == true;
+      final solved = json['solved'] is bool ? json['solved'] as bool : !skipped;
+      if (skipped && solved) {
+        return SyntheticEngine2Result.unavailable(
+          'Synthetic Engine 2 returned an invalid skipped completion.',
+        );
+      }
       return SyntheticEngine2Result._(
         status: SyntheticEngine2Status.complete,
         sessionId: _opaqueIdOrNull(json['session_id']),
@@ -248,7 +383,8 @@ class SyntheticEngine2Result {
         activeSectors: _mechanicsFromJson(json['active_sectors']),
         finalSector: _mechanicOrNull(json['final_sector']),
         sandbox: _sandboxOrNull(json['sandbox']),
-        solved: true,
+        solved: solved,
+        skipped: skipped,
       );
     }
     if (rawStatus != 'in_progress') {
@@ -265,18 +401,30 @@ class SyntheticEngine2Result {
     // A soft miss deliberately stays on the same word-free surface. The
     // caller retains its current puzzle while the server has recorded the
     // aggregate response; there is no new puzzle to parse here.
+    final skipped = json['skipped'] == true;
     if (json['solved'] == false) {
-      if (rawTask != null) {
+      if (rawTask == null) {
+        if (skipped) {
+          return SyntheticEngine2Result.unavailable(
+            'Synthetic Engine 2 returned an incomplete skipped response.',
+          );
+        }
+        return SyntheticEngine2Result._(
+          status: SyntheticEngine2Status.inProgress,
+          sessionId: sessionId,
+          currentLayer: currentLayer,
+          activeSectors: _mechanicsFromJson(json['active_sectors']),
+          solved: false,
+        );
+      }
+      if (!skipped) {
         return SyntheticEngine2Result.unavailable(
           'Synthetic Engine 2 returned an invalid soft-miss response.',
         );
       }
-      return SyntheticEngine2Result._(
-        status: SyntheticEngine2Status.inProgress,
-        sessionId: sessionId,
-        currentLayer: currentLayer,
-        activeSectors: _mechanicsFromJson(json['active_sectors']),
-        solved: false,
+    } else if (skipped) {
+      return SyntheticEngine2Result.unavailable(
+        'Synthetic Engine 2 returned an invalid skipped response.',
       );
     }
     if (rawTask is! Map) {
@@ -314,6 +462,7 @@ class SyntheticEngine2Result {
         sector: task.mechanics.single,
       ),
       solved: json['solved'] is bool ? json['solved'] as bool : null,
+      skipped: skipped,
     );
   }
 }

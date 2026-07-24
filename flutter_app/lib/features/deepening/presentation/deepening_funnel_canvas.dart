@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -11,6 +13,11 @@ import '../../exploration/providers/intake_provider.dart';
 import '../../exploration/services/capstone_router.dart';
 import '../../exploration/services/telemetry_tracker.dart';
 import '../../exploration/services/visual_scene_service.dart';
+
+/// A long no-response interval is an optional transition, never a failure.
+/// It intentionally uses wall time while the telemetry tracker excludes any
+/// support-ladder pause from its active-latency signal.
+const taskAutoAdvanceAfterInactivity = Duration(minutes: 2);
 
 class DeepeningFunnelCanvas extends ConsumerStatefulWidget {
   final String userId;
@@ -26,6 +33,8 @@ class _DeepeningFunnelCanvasState extends ConsumerState<DeepeningFunnelCanvas> {
   TelemetryTracker? _tracker;
   String? _taskId;
   bool _reportedCapstone = false;
+  Timer? _autoAdvanceTimer;
+  bool _autoAdvanceInProgress = false;
 
   @override
   void initState() {
@@ -35,8 +44,50 @@ class _DeepeningFunnelCanvasState extends ConsumerState<DeepeningFunnelCanvas> {
 
   void _syncTracker(PuzzleSpec task) {
     if (_taskId == task.id) return;
+    _autoAdvanceTimer?.cancel();
     _taskId = task.id;
     _tracker = TelemetryTracker();
+    _autoAdvanceInProgress = false;
+    _scheduleAutoAdvance(task);
+  }
+
+  void _scheduleAutoAdvance(PuzzleSpec task) {
+    _autoAdvanceTimer?.cancel();
+    _autoAdvanceTimer = Timer(
+      taskAutoAdvanceAfterInactivity,
+      () => _advanceAfterNoResponse(task.id),
+    );
+  }
+
+  void _noteInteraction(
+    PuzzleSpec task,
+    ExplorationFunnelController controller,
+  ) {
+    if (_autoAdvanceInProgress || _taskId != task.id) return;
+    _tracker?.resume();
+    controller.recordChildInteraction();
+    _scheduleAutoAdvance(task);
+  }
+
+  Future<void> _advanceAfterNoResponse(String taskId) async {
+    if (!mounted || _autoAdvanceInProgress || _taskId != taskId) return;
+    final state = ref.read(explorationFunnelProvider);
+    final task = state.currentTask;
+    final tracker = _tracker;
+    if (task == null || tracker == null || task.id != taskId) return;
+
+    _autoAdvanceInProgress = true;
+    final controller = ref.read(explorationFunnelProvider.notifier);
+    final telemetry = tracker.finish();
+    if (state.usesSyntheticCloud) {
+      final result = await controller.skipSyntheticCloudTask(telemetry: telemetry);
+      if (!mounted || result != SyntheticCloudChoiceResult.unavailable) return;
+      _autoAdvanceInProgress = false;
+      tracker.resume();
+      _scheduleAutoAdvance(task);
+      return;
+    }
+    controller.skipCurrentTask(telemetry);
   }
 
   @override
@@ -115,9 +166,9 @@ class _DeepeningFunnelCanvasState extends ConsumerState<DeepeningFunnelCanvas> {
                       task: task,
                       scene: visualScene,
                       highlightTarget: state.support.highlightTarget,
+                      onInteraction: () => _noteInteraction(task, controller),
                       onChoice: (option) async {
-                        _tracker!.resume();
-                        controller.recordChildInteraction();
+                        _noteInteraction(task, controller);
                         if (state.usesSyntheticCloud) {
                           final outcome = await controller.submitSyntheticCloudSelection(
                             optionId: option,
@@ -151,6 +202,12 @@ class _DeepeningFunnelCanvasState extends ConsumerState<DeepeningFunnelCanvas> {
         ),
       ),
     );
+  }
+
+  @override
+  void dispose() {
+    _autoAdvanceTimer?.cancel();
+    super.dispose();
   }
 }
 

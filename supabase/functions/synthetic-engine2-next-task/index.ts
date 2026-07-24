@@ -400,16 +400,22 @@ type Telemetry = {
 type AggregatedTelemetry = Telemetry & { attemptCount: number };
 
 type StartRequest = { action: 'start'; visual: VisualPreferences };
-type AnswerRequest = {
-  action: 'answer';
+type TaskResponseRequest = {
   sessionId: string;
   taskId: string;
   sector: Sector;
   layer: number;
-  optionId: string;
   telemetry: Telemetry;
 };
-type DemoRequest = StartRequest | AnswerRequest;
+type AnswerRequest = TaskResponseRequest & {
+  action: 'answer';
+  optionId: string;
+};
+// A skip is a final, non-correct response for an already-issued synthetic
+// task. It has no option or free-text field, so a client cannot turn an idle
+// timeout into an answer submission.
+type SkipRequest = TaskResponseRequest & { action: 'skip' };
+type DemoRequest = StartRequest | AnswerRequest | SkipRequest;
 
 type PuzzlePlan = {
   version: 1;
@@ -605,7 +611,22 @@ function parseRequest(value: unknown): DemoRequest {
       telemetry: parseTelemetry(body.telemetry),
     };
   }
-  throw new ValidationError('action must be start or answer.');
+  if (action === 'skip') {
+    requireExactKeys(
+      body,
+      ['action', 'session_id', 'task_id', 'sector', 'layer', 'telemetry'],
+      'request',
+    );
+    return {
+      action,
+      sessionId: requireUuid(body.session_id, 'session_id'),
+      taskId: requireUuid(body.task_id, 'task_id'),
+      sector: requireEnum<Sector>(body.sector, sectorSet, 'sector'),
+      layer: requireInteger(body.layer, 'layer', 1, 10),
+      telemetry: parseTelemetry(body.telemetry),
+    };
+  }
+  throw new ValidationError('action must be start, answer, or skip.');
 }
 
 function asSectorList(value: unknown): Sector[] {
@@ -1169,24 +1190,35 @@ function sandboxForSector(sector: Sector): 'calendar' | 'constellation' | 'explo
   return 'exploring';
 }
 
-function scoreTelemetry(telemetry: AggregatedTelemetry, layer: number): {
+function scoreFinalTelemetry(
+  telemetry: AggregatedTelemetry,
+  layer: number,
+  correct: boolean,
+): {
   accuracy: number;
   recovery: number;
   engagement: number;
   speed: number;
   isolationScore: number;
 } {
-  // Every completed task has one correct final selection. The complete
-  // interaction stream is reconstructed from server-persisted option attempts,
-  // rather than trusting a client-provided correctness value.
-  const accuracy = clamp(1 / telemetry.attemptCount);
-  const recovery = telemetry.misclicks === 0
-    ? 1
-    : clamp(telemetry.recoveredErrors / telemetry.misclicks);
+  // A completed answer has one server-validated correct final selection. A
+  // skip is final too, but is never turned into a correct/recovered response
+  // claim. Its bounded interaction and timing aggregates still contribute to
+  // the existing response-signal formula below.
+  const accuracy = correct ? clamp(1 / telemetry.attemptCount) : 0;
+  const recovery = correct
+    ? (telemetry.misclicks === 0
+      ? 1
+      : clamp(telemetry.recoveredErrors / telemetry.misclicks))
+    : 0;
   // Engagement is deliberately bounded and distinct from speed/accuracy: a
   // second sustained attempt can lift the interaction signal, while heavy
-  // Support Ladder use lowers the independence part of that signal.
-  const interactionSignal = clamp(telemetry.attemptCount / 2);
+  // Support Ladder use lowers the independence part of that signal. For a
+  // skip, use only the supplied aggregate rather than inventing an answer
+  // attempt count.
+  const interactionSignal = clamp(
+    (correct ? telemetry.attemptCount : telemetry.interactions) / 2,
+  );
   const independenceSignal = clamp(1 - telemetry.supportLevel / 3);
   const engagement = clamp(0.6 * interactionSignal + 0.4 * independenceSignal);
   const speed = clamp(1 - telemetry.latencyMs / speedBudgetFor(layer));
@@ -1401,6 +1433,7 @@ function progressResponse(
   session: SessionRow,
   solved: boolean | undefined,
   task?: TaskRow,
+  skipped = false,
 ): Response {
   const body: Record<string, unknown> = {
     status: 'in_progress',
@@ -1409,20 +1442,27 @@ function progressResponse(
     active_sectors: asSectorList(session.active_sectors),
   };
   if (solved !== undefined) body.solved = solved;
+  if (skipped) body.skipped = true;
   if (task) body.next_task = publicTask(task);
   return ok(body);
 }
 
-function completeResponse(session: SessionRow, finalSector: Sector): Response {
-  return ok({
+function completeResponse(
+  session: SessionRow,
+  finalSector: Sector,
+  { solved = true, skipped = false }: { solved?: boolean; skipped?: boolean } = {},
+): Response {
+  const body: Record<string, unknown> = {
     status: 'complete',
-    solved: true,
+    solved,
     session_id: session.id,
     current_layer: 10,
     active_sectors: [finalSector],
     final_sector: finalSector,
     sandbox: sandboxForSector(finalSector),
-  });
+  };
+  if (skipped) body.skipped = true;
+  return ok(body);
 }
 
 async function startSession(
@@ -1515,13 +1555,14 @@ async function startSession(
   return progressResponse(session, undefined, task);
 }
 
-async function handleCorrectAnswer(
+async function finalizeTaskResponse(
   serviceClient: { from: Function; rpc: Function },
   session: SessionRow,
   task: TaskRow,
   telemetry: AggregatedTelemetry,
+  { correct, skipped = false }: { correct: boolean; skipped?: boolean },
 ): Promise<Response> {
-  const scored = scoreTelemetry(telemetry, task.layer);
+  const scored = scoreFinalTelemetry(telemetry, task.layer, correct);
   const { error: eventError } = await serviceClient
     .from('synthetic_engine2_demo_events')
     .insert({
@@ -1530,7 +1571,7 @@ async function handleCorrectAnswer(
       anonymous_user_id: session.anonymous_user_id,
       layer: task.layer,
       sector: task.sector,
-      correct: true,
+      correct,
       latency_ms: telemetry.latencyMs,
       misclicks: telemetry.misclicks,
       recovered_errors: telemetry.recoveredErrors,
@@ -1543,14 +1584,18 @@ async function handleCorrectAnswer(
       isolation_score: scored.isolationScore,
     });
   if (eventError) {
-    // Idempotent retry after a successful first answer: resume the already
-    // issued task or return the completed terminal state below.
+    // A network retry may repeat a final response after the event insert won.
+    // It can resume only the same outcome; an answer and a skip must never
+    // overwrite each other or silently change correctness.
     const { data: existing } = await serviceClient
       .from('synthetic_engine2_demo_events')
-      .select('id')
+      .select('correct')
       .eq('task_id', task.id)
       .maybeSingle();
     if (!existing) throw new Error('Synthetic demo response could not be recorded.');
+    if ((existing as { correct?: unknown }).correct !== correct) {
+      return conflict('Synthetic demo task already has a different final response.');
+    }
   }
   const { error: completeTaskError } = await serviceClient
     .from('synthetic_engine2_demo_tasks')
@@ -1560,7 +1605,7 @@ async function handleCorrectAnswer(
   if (completeTaskError) throw new Error('Synthetic demo task could not be completed.');
 
   const nextQueued = await issueNextQueuedTask(serviceClient, session);
-  if (nextQueued) return progressResponse(session, true, nextQueued);
+  if (nextQueued) return progressResponse(session, correct, nextQueued, skipped);
 
   const ranked = await rankLayer(serviceClient, session);
   if (session.current_layer >= 10) {
@@ -1578,7 +1623,10 @@ async function handleCorrectAnswer(
       .select('*')
       .maybeSingle();
     if (completeError || !completeSession) throw new Error('Synthetic demo completion could not be saved.');
-    return completeResponse(completeSession as SessionRow, finalSector);
+    return completeResponse(completeSession as SessionRow, finalSector, {
+      solved: correct,
+      skipped,
+    });
   }
 
   const nextLayer = session.current_layer + 1;
@@ -1589,7 +1637,7 @@ async function handleCorrectAnswer(
   const nextSession = await updateLayerState(serviceClient, session.id, nextLayer, survivors);
   const preferences = asVisualPreferences(nextSession.visual_preferences);
   const nextTask = await createLayerTasks(serviceClient, nextSession, survivors, preferences);
-  return progressResponse(nextSession, true, nextTask);
+  return progressResponse(nextSession, correct, nextTask, skipped);
 }
 
 async function recordAttempt(
@@ -1654,32 +1702,47 @@ async function aggregateAttempts(
   };
 }
 
-async function answerTask(
-  serviceClient: { from: Function; rpc: Function },
+type OwnedTaskResolution =
+  | { kind: 'response'; response: Response }
+  | { kind: 'task'; session: SessionRow; task: TaskRow };
+
+async function loadOwnedTask(
+  serviceClient: { from: Function },
   anonymousUserId: string,
-  request: AnswerRequest,
-): Promise<Response> {
+  request: TaskResponseRequest,
+): Promise<OwnedTaskResolution> {
   const { data: rawSession, error: sessionError } = await serviceClient
     .from('synthetic_engine2_demo_sessions')
     .select('*')
     .eq('id', request.sessionId)
     .eq('anonymous_user_id', anonymousUserId)
     .maybeSingle();
-  if (sessionError || !rawSession) return conflict('Synthetic demo session is not available.');
+  if (sessionError || !rawSession) {
+    return { kind: 'response', response: conflict('Synthetic demo session is not available.') };
+  }
   const session = rawSession as SessionRow;
   if (session.status === 'complete') {
     const finalSector = session.final_sector;
     if (typeof finalSector === 'string' && sectorSet.has(finalSector)) {
-      return completeResponse(session, finalSector as Sector);
+      return {
+        kind: 'response',
+        response: completeResponse(session, finalSector as Sector),
+      };
     }
-    return conflict('Synthetic demo session has already completed.');
+    return {
+      kind: 'response',
+      response: conflict('Synthetic demo session has already completed.'),
+    };
   }
   if (session.status !== 'in_progress' || new Date(session.expires_at) <= new Date()) {
     await serviceClient.from('synthetic_engine2_demo_sessions')
       .update({ status: 'expired', updated_at: new Date().toISOString() })
       .eq('id', session.id)
       .eq('status', 'in_progress');
-    return conflict('Synthetic demo session has expired. Start a new showcase session.');
+    return {
+      kind: 'response',
+      response: conflict('Synthetic demo session has expired. Start a new showcase session.'),
+    };
   }
   const { data: rawTask, error: taskError } = await serviceClient
     .from('synthetic_engine2_demo_tasks')
@@ -1688,12 +1751,28 @@ async function answerTask(
     .eq('session_id', session.id)
     .eq('anonymous_user_id', anonymousUserId)
     .maybeSingle();
-  if (taskError || !rawTask) return conflict('Synthetic demo task is not available.');
+  if (taskError || !rawTask) {
+    return { kind: 'response', response: conflict('Synthetic demo task is not available.') };
+  }
   const task = rawTask as TaskRow;
   if (task.sector !== request.sector || task.layer !== request.layer ||
       task.layer !== session.current_layer) {
-    return conflict('Synthetic demo task does not match the active layer.');
+    return {
+      kind: 'response',
+      response: conflict('Synthetic demo task does not match the active layer.'),
+    };
   }
+  return { kind: 'task', session, task };
+}
+
+async function answerTask(
+  serviceClient: { from: Function; rpc: Function },
+  anonymousUserId: string,
+  request: AnswerRequest,
+): Promise<Response> {
+  const resolved = await loadOwnedTask(serviceClient, anonymousUserId, request);
+  if (resolved.kind === 'response') return resolved.response;
+  const { session, task } = resolved;
   if (task.status === 'completed') {
     const next = await issueNextQueuedTask(serviceClient, session);
     return next ? progressResponse(session, true, next) : conflict('Synthetic demo task was already completed.');
@@ -1717,7 +1796,36 @@ async function answerTask(
     // task; its next answer carries the aggregate fictional telemetry.
     return progressResponse(session, false);
   }
-  return handleCorrectAnswer(serviceClient, session, task, await aggregateAttempts(serviceClient, task.id));
+  return finalizeTaskResponse(
+    serviceClient,
+    session,
+    task,
+    await aggregateAttempts(serviceClient, task.id),
+    { correct: true },
+  );
+}
+
+async function skipTask(
+  serviceClient: { from: Function; rpc: Function },
+  anonymousUserId: string,
+  request: SkipRequest,
+): Promise<Response> {
+  const resolved = await loadOwnedTask(serviceClient, anonymousUserId, request);
+  if (resolved.kind === 'response') return resolved.response;
+  const { session, task } = resolved;
+  // A skip is valid only for the one currently issued task. It cannot be used
+  // to rewrite an already-final answer or to advance a queued task.
+  if (task.status !== 'issued') return conflict('Synthetic demo task is not the active task.');
+
+  // Do not create a fake selection/attempt for inactivity. The final event
+  // stores only the already allowlisted, bounded aggregate supplied by Flutter.
+  return finalizeTaskResponse(
+    serviceClient,
+    session,
+    task,
+    { ...request.telemetry, attemptCount: request.telemetry.interactions },
+    { correct: false, skipped: true },
+  );
 }
 
 Deno.serve(async (req: Request): Promise<Response> => {
@@ -1741,7 +1849,10 @@ Deno.serve(async (req: Request): Promise<Response> => {
     if (request.action === 'start') {
       return await startSession(auth.serviceClient, auth.user.id, request.visual);
     }
-    return await answerTask(auth.serviceClient, auth.user.id, request);
+    if (request.action === 'answer') {
+      return await answerTask(auth.serviceClient, auth.user.id, request);
+    }
+    return await skipTask(auth.serviceClient, auth.user.id, request);
   } catch (error) {
     if (error instanceof ValidationError) return badRequest(error.message);
     if (error instanceof QuotaExceededError) {
