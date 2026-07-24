@@ -41,7 +41,8 @@ void main() {
     expect(encoded, isNot(contains('private familiar')));
   });
 
-  test('selection request sends an issued option and aggregate telemetry only', () {
+  test('selection request sends an issued option and aggregate telemetry only',
+      () {
     const task = PuzzleSpec(
       id: 'task_1',
       mechanics: [PlayMechanic.chronologicalSequencing],
@@ -119,7 +120,8 @@ void main() {
     },
   );
 
-  test('response parser returns the generated puzzle and a soft-miss state', () {
+  test('response parser returns the generated puzzle and a soft-miss state',
+      () {
     final result = SyntheticEngine2Result.fromJson({
       'status': 'in_progress',
       'session_id': 'session_1',
@@ -141,6 +143,25 @@ void main() {
       'next_task': <String, dynamic>{},
     });
     expect(invalidSoftMiss.status, SyntheticEngine2Status.unavailable);
+
+    final incorrectWithNextTask = SyntheticEngine2Result.fromJson({
+      'status': 'in_progress',
+      'session_id': 'session_1',
+      'current_layer': 1,
+      'active_sectors': ['chronologicalSequencing'],
+      'solved': false,
+      'next_task': <String, dynamic>{
+        'id': 'task_2',
+        'sector': 'chronologicalSequencing',
+        'layer': 1,
+        'options': ['option_a', 'option_b'],
+        'correct_option': 'option_b',
+      },
+    });
+    expect(incorrectWithNextTask.status, SyntheticEngine2Status.inProgress);
+    expect(incorrectWithNextTask.isUnsolved, isFalse);
+    expect(incorrectWithNextTask.isSkipped, isFalse);
+    expect(incorrectWithNextTask.hasNextTask, isTrue);
 
     final skippedWithNextTask = SyntheticEngine2Result.fromJson({
       'status': 'in_progress',
@@ -222,7 +243,8 @@ void main() {
     });
 
     expect(issuedTask.isInProgress, isTrue);
-    expect(issuedTask.nextTask?.mechanics, [PlayMechanic.chronologicalSequencing]);
+    expect(
+        issuedTask.nextTask?.mechanics, [PlayMechanic.chronologicalSequencing]);
     expect(issuedTask.nextTask?.visualThemeKey, 'rail');
     expect(issuedTask.scene?.sceneType, 'sequence');
     expect(issuedTask.scene?.subject, 'rail');

@@ -27,9 +27,10 @@ class AmbientPlayBoard extends StatefulWidget {
   final PuzzleSpec task;
   final VisualSceneSpec? scene;
   final bool highlightTarget;
-  /// Returns `true` when the choice solved the current activity. A soft miss
-  /// is deliberately kept on this same surface so it can be corrected without
-  /// a visible failure state.
+
+  /// Returns `true` when the completed response advances to the next
+  /// activity. A task may advance after either a correct or incorrect final
+  /// response; it never waits for a hidden correct answer.
   final FutureOr<bool> Function(String choice) onChoice;
 
   /// Observes any touch or drag so the surrounding flow can reset its quiet
@@ -41,37 +42,86 @@ class AmbientPlayBoard extends StatefulWidget {
 }
 
 class _AmbientPlayBoardState extends State<AmbientPlayBoard> {
+  static const _multiResponseMechanics = {
+    PlayMechanic.visualSpatialConstruction,
+    PlayMechanic.chronologicalSequencing,
+    PlayMechanic.narrativeEventOrdering,
+    PlayMechanic.rhythmicMotorSequencing,
+    PlayMechanic.proceduralSequencing,
+    PlayMechanic.multiAttributeSorting,
+    PlayMechanic.creativeStorytelling,
+    PlayMechanic.workingMemorySpan,
+  };
+
   int? _selectedIndex;
-  bool _locked = false;
+  bool _submitting = false;
+  Timer? _choiceSettleTimer;
+  String? _draftChoice;
+
+  static const _choiceSettleWindow = Duration(milliseconds: 1500);
 
   @override
   void didUpdateWidget(covariant AmbientPlayBoard oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.task.id != widget.task.id) {
+      _choiceSettleTimer?.cancel();
       _selectedIndex = null;
-      _locked = false;
+      _submitting = false;
+      _draftChoice = null;
     }
   }
 
-  Future<void> _choose(List<String> options, int index) async {
-    if (_locked) return;
+  void _choose(List<String> options, int index) {
+    if (_submitting) return;
     if (widget.task.preferHaptics) HapticFeedback.selectionClick();
-    setState(() {
-      _locked = true;
-      _selectedIndex = index;
-    });
-    await Future<void>.delayed(const Duration(milliseconds: 280));
-    if (!mounted) return;
+    setState(() => _selectedIndex = index);
+    _stageChoice(options[index]);
+  }
 
-    final solved = await widget.onChoice(options[index]);
-    if (!mounted || solved) return;
+  void _stageChoice(String choice) {
+    if (_submitting) return;
+    _draftChoice = choice;
+    _choiceSettleTimer?.cancel();
+    _choiceSettleTimer = Timer(
+      _choiceSettleWindow,
+      _submitDraftChoice,
+    );
+  }
 
-    // A wrong item settles back into the scene. The child stays with the
-    // same activity and can recover naturally with another choice.
+  /// Lets specialized one-response boards briefly settle a visual selection.
+  /// Returning `false` leaves their surface ready for a revised choice while
+  /// this board keeps only the latest opaque option for final submission.
+  Future<bool> _stageDirectChoice(String choice) async {
+    _stageChoice(choice);
+    return false;
+  }
+
+  Future<void> _submitDraftChoice() async {
+    final choice = _draftChoice;
+    if (!mounted || _submitting || choice == null) {
+      return;
+    }
+    setState(() => _submitting = true);
+    final advanced = await widget.onChoice(choice);
+    if (!mounted || advanced) return;
+
+    // An unavailable cloud response keeps the board available for another
+    // choice without exposing a failure state to the child.
     setState(() {
-      _locked = false;
+      _submitting = false;
       _selectedIndex = null;
+      _draftChoice = null;
     });
+  }
+
+  bool _usesOwnResponseSettle(PuzzleSpec task) =>
+      task.mechanics.length == 1 &&
+      _multiResponseMechanics.contains(task.mechanics.single);
+
+  @override
+  void dispose() {
+    _choiceSettleTimer?.cancel();
+    super.dispose();
   }
 
   Widget _observeInteraction(Widget child) => Listener(
@@ -89,19 +139,22 @@ class _AmbientPlayBoardState extends State<AmbientPlayBoard> {
       return _observeInteraction(SpatialTemporalInteractionBoard(
         task: task,
         highlightTarget: widget.highlightTarget,
-        onChoice: widget.onChoice,
+        onChoice:
+            _usesOwnResponseSettle(task) ? widget.onChoice : _stageDirectChoice,
       ));
     }
     if (NonAudioMechanicBoard.supports(task)) {
       return _observeInteraction(NonAudioMechanicBoard(
         task: task,
         highlightTarget: widget.highlightTarget,
-        onChoice: widget.onChoice,
+        onChoice:
+            _usesOwnResponseSettle(task) ? widget.onChoice : _stageDirectChoice,
       ));
     }
     if (singleMechanic != null &&
         SocialCreativeInteractionBoard.supports(singleMechanic)) {
       return _observeInteraction(SocialCreativeInteractionBoard(
+        key: ValueKey('social-creative-${task.id}'),
         task: task,
         highlightTarget: widget.highlightTarget,
         onChoice: widget.onChoice,
@@ -117,9 +170,13 @@ class _AmbientPlayBoardState extends State<AmbientPlayBoard> {
       correctIndex: targetIndex,
     );
     final motif = _motifFor(task, scene);
-    final animation = task.allowMotion ? (scene?.onTapAnimation ?? 'snap') : 'none';
-    final sceneType = plan?.kind.wireName ?? scene?.sceneType ?? _sceneTypeFor(task);
-    final tokenKind = plan?.kind ?? visualPuzzleKindFromWire(sceneType) ?? VisualPuzzleKind.match;
+    final animation =
+        task.allowMotion ? (scene?.onTapAnimation ?? 'snap') : 'none';
+    final sceneType =
+        plan?.kind.wireName ?? scene?.sceneType ?? _sceneTypeFor(task);
+    final tokenKind = plan?.kind ??
+        visualPuzzleKindFromWire(sceneType) ??
+        VisualPuzzleKind.match;
     final target = _PictureToken(
       variant: plan?.targetVariant ?? targetIndex,
       motif: motif,
@@ -142,7 +199,8 @@ class _AmbientPlayBoardState extends State<AmbientPlayBoard> {
             color: motif.color.withValues(alpha: .10),
             borderRadius: BorderRadius.circular(28),
             border: Border.all(
-              color: motif.color.withValues(alpha: widget.highlightTarget ? .95 : .32),
+              color: motif.color
+                  .withValues(alpha: widget.highlightTarget ? .95 : .32),
               width: widget.highlightTarget ? 4 : 2,
             ),
           ),
@@ -187,7 +245,9 @@ class _AmbientPlayBoardState extends State<AmbientPlayBoard> {
   }
 
   List<String> _visibleOptions(PuzzleSpec task, int requestedCount) {
-    final visible = task.options.take(requestedCount.clamp(1, task.options.length).toInt()).toList();
+    final visible = task.options
+        .take(requestedCount.clamp(1, task.options.length).toInt())
+        .toList();
     if (visible.isNotEmpty && !visible.contains(task.correctOption)) {
       visible[visible.length - 1] = task.correctOption;
     }
@@ -205,7 +265,8 @@ class _AmbientPlayBoardState extends State<AmbientPlayBoard> {
     // Builder/offline sessions deliberately use a local, bounded plan rather
     // than falling back to one generic colour choice. Every Layer 1 mechanic
     // therefore retains its own rule, visual trace, and interaction grammar.
-    final source = scene?.puzzlePlan ?? VisualPuzzlePlan.localForMechanic(mechanic);
+    final source =
+        scene?.puzzlePlan ?? VisualPuzzlePlan.localForMechanic(mechanic);
     return source.resolveFor(
       sector: mechanic,
       optionCount: optionCount,
@@ -228,26 +289,40 @@ class _AmbientPlayBoardState extends State<AmbientPlayBoard> {
     final palette = scene?.palette.isNotEmpty == true
         ? scene!.palette.map(_colorForName).toList(growable: false)
         : task.familiarColors.isEmpty
-        ? const [Color(0xff5270a2), Color(0xffd76b5e), Color(0xffe3ad45)]
-        : task.familiarColors.map(_colorFor).toList(growable: false);
+            ? const [Color(0xff5270a2), Color(0xffd76b5e), Color(0xffe3ad45)]
+            : task.familiarColors.map(_colorFor).toList(growable: false);
     final color = palette.first;
-    if (theme.contains('car') || theme.contains('vehicle') || theme.contains('road')) {
+    if (theme.contains('car') ||
+        theme.contains('vehicle') ||
+        theme.contains('road')) {
       return _VisualMotif(Icons.directions_car_rounded, color, palette);
     }
-    if (theme.contains('train') || theme.contains('rail')) return _VisualMotif(Icons.train_rounded, color, palette);
-    if (theme.contains('space') || theme.contains('planet') || theme.contains('rocket')) {
+    if (theme.contains('train') || theme.contains('rail')) {
+      return _VisualMotif(Icons.train_rounded, color, palette);
+    }
+    if (theme.contains('space') ||
+        theme.contains('planet') ||
+        theme.contains('rocket')) {
       return _VisualMotif(Icons.rocket_launch_rounded, color, palette);
     }
-    if (theme.contains('animal') || theme.contains('dinosaur') || theme.contains('pet')) {
+    if (theme.contains('animal') ||
+        theme.contains('dinosaur') ||
+        theme.contains('pet')) {
       return _VisualMotif(Icons.pets_rounded, color, palette);
     }
-    if (theme.contains('tool') || theme.contains('build') || theme.contains('plumb')) {
+    if (theme.contains('tool') ||
+        theme.contains('build') ||
+        theme.contains('plumb')) {
       return _VisualMotif(Icons.build_rounded, color, palette);
     }
-    if (theme.contains('sea') || theme.contains('water') || theme.contains('ocean')) {
+    if (theme.contains('sea') ||
+        theme.contains('water') ||
+        theme.contains('ocean')) {
       return _VisualMotif(Icons.waves_rounded, color, palette);
     }
-    if (theme.contains('tree') || theme.contains('nature') || theme.contains('garden')) {
+    if (theme.contains('tree') ||
+        theme.contains('nature') ||
+        theme.contains('garden')) {
       return _VisualMotif(Icons.park_rounded, color, palette);
     }
     return _VisualMotif(Icons.auto_awesome_rounded, color, palette);
@@ -296,10 +371,13 @@ class _VisualStage extends StatelessWidget {
 
   Widget _stage() {
     final accent = motif.color;
-    final kind = plan?.kind ?? visualPuzzleKindFromWire(sceneType) ?? VisualPuzzleKind.match;
+    final kind = plan?.kind ??
+        visualPuzzleKindFromWire(sceneType) ??
+        VisualPuzzleKind.match;
     final values = plan?.stimulus.isNotEmpty == true
         ? plan!.stimulus
-        : List<int>.generate(3, (index) => ((plan?.variant ?? 0) + index + 1) % 16);
+        : List<int>.generate(
+            3, (index) => ((plan?.variant ?? 0) + index + 1) % 16);
     final rule = plan?.rule;
     final baseStage = switch (sceneType) {
       'sequence' => _SequenceStage(target: target, accent: accent),
@@ -416,14 +494,17 @@ class _RuleVisualStage extends StatelessWidget {
         VisualPuzzleRule.choosePerspectiveOutcome ||
         VisualPuzzleRule.chooseTurnStrategy ||
         VisualPuzzleRule.matchMelodyPattern ||
-        VisualPuzzleRule.completeVisualComposition => true,
+        VisualPuzzleRule.completeVisualComposition =>
+          true,
         _ => false,
       };
 
   List<int> get _values => values.isEmpty ? const [2, 5, 8, 11] : values;
-  List<Color> get _palette => motif.palette.isEmpty ? const [Color(0xff5270a2)] : motif.palette;
+  List<Color> get _palette =>
+      motif.palette.isEmpty ? const [Color(0xff5270a2)] : motif.palette;
   Color _color(int index, {double alpha = 1}) =>
-      _palette[_values[index % _values.length] % _palette.length].withValues(alpha: alpha);
+      _palette[_values[index % _values.length] % _palette.length]
+          .withValues(alpha: alpha);
 
   @override
   Widget build(BuildContext context) => KeyedSubtree(
@@ -444,13 +525,17 @@ class _RuleVisualStage extends StatelessWidget {
             Container(
               width: 142,
               height: 142,
-              decoration: BoxDecoration(shape: BoxShape.circle, border: Border.all(color: _color(0, alpha: .45), width: 2)),
+              decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: Border.all(color: _color(0, alpha: .45), width: 2)),
             ),
             Transform.rotate(
               angle: .78,
-              child: Icon(Icons.change_history_rounded, color: _color(1, alpha: .52), size: 88),
+              child: Icon(Icons.change_history_rounded,
+                  color: _color(1, alpha: .52), size: 88),
             ),
-            const Positioned(top: 8, child: Icon(Icons.rotate_right_rounded, size: 25)),
+            const Positioned(
+                top: 8, child: Icon(Icons.rotate_right_rounded, size: 25)),
             _slot(),
           ],
         );
@@ -520,7 +605,8 @@ class _RuleVisualStage extends StatelessWidget {
             _panel(Icons.play_arrow_rounded, 0),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 12),
-              child: Icon(Icons.arrow_forward_rounded, color: _color(1), size: 34),
+              child:
+                  Icon(Icons.arrow_forward_rounded, color: _color(1), size: 34),
             ),
             _slot(size: 60),
           ],
@@ -640,7 +726,8 @@ class _RuleVisualStage extends StatelessWidget {
           columns: 3,
           cells: List<Widget>.generate(
             9,
-            (index) => _tile(index, highlighted: const {0, 4, 7}.contains(index), rounded: true),
+            (index) => _tile(index,
+                highlighted: const {0, 4, 7}.contains(index), rounded: true),
           )..[8] = _slot(size: 38),
         );
       case VisualPuzzleRule.findSceneChange:
@@ -687,7 +774,9 @@ class _RuleVisualStage extends StatelessWidget {
                 children: List<Widget>.generate(
                   15,
                   (index) => Icon(
-                    index == 9 ? Icons.star_rounded : Icons.change_history_rounded,
+                    index == 9
+                        ? Icons.star_rounded
+                        : Icons.change_history_rounded,
                     color: _color(index, alpha: index == 9 ? .95 : .34),
                     size: index == 9 ? 24 : 16,
                   ),
@@ -735,7 +824,9 @@ class _RuleVisualStage extends StatelessWidget {
                   width: 25,
                   height: 25,
                   margin: const EdgeInsets.symmetric(horizontal: 4),
-                  decoration: BoxDecoration(color: _color(index, alpha: index.isEven ? .82 : .38), shape: BoxShape.circle),
+                  decoration: BoxDecoration(
+                      color: _color(index, alpha: index.isEven ? .82 : .38),
+                      shape: BoxShape.circle),
                 ),
               ),
             ),
@@ -754,7 +845,8 @@ class _RuleVisualStage extends StatelessWidget {
                 5,
                 (index) => Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 4),
-                  child: Icon(Icons.music_note_rounded, color: _color(index), size: 18 + (index % 3) * 8),
+                  child: Icon(Icons.music_note_rounded,
+                      color: _color(index), size: 18 + (index % 3) * 8),
                 ),
               ),
             ),
@@ -769,7 +861,8 @@ class _RuleVisualStage extends StatelessWidget {
             9,
             (index) => index == 4
                 ? _slot(size: 40)
-                : _tile(index, rounded: index % 3 == 1, highlighted: index.isEven),
+                : _tile(index,
+                    rounded: index % 3 == 1, highlighted: index.isEven),
           ),
         );
 
@@ -785,12 +878,14 @@ class _RuleVisualStage extends StatelessWidget {
         decoration: BoxDecoration(
           color: motif.color.withValues(alpha: .08),
           borderRadius: BorderRadius.circular(size * .24),
-          border: Border.all(color: motif.color.withValues(alpha: .58), width: 2),
+          border:
+              Border.all(color: motif.color.withValues(alpha: .58), width: 2),
         ),
         child: FittedBox(child: target),
       );
 
-  Widget _tile(int index, {bool rounded = false, bool highlighted = false}) => Container(
+  Widget _tile(int index, {bool rounded = false, bool highlighted = false}) =>
+      Container(
         width: 37,
         height: 37,
         alignment: Alignment.center,
@@ -799,10 +894,13 @@ class _RuleVisualStage extends StatelessWidget {
           borderRadius: BorderRadius.circular(rounded ? 18 : 5),
           border: Border.all(color: _color(index, alpha: .7)),
         ),
-        child: index % 3 == 0 ? Icon(motif.icon, color: _color(index), size: 17) : null,
+        child: index % 3 == 0
+            ? Icon(motif.icon, color: _color(index), size: 17)
+            : null,
       );
 
-  Widget _matrix({required int columns, required List<Widget> cells}) => SizedBox(
+  Widget _matrix({required int columns, required List<Widget> cells}) =>
+      SizedBox(
         width: columns * 51.0,
         child: Wrap(
           alignment: WrapAlignment.center,
@@ -836,7 +934,8 @@ class _RuleVisualStage extends StatelessWidget {
             if (index < children.length - 1)
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 5),
-                child: Icon(Icons.arrow_forward_rounded, color: _color(index, alpha: .58), size: 22),
+                child: Icon(Icons.arrow_forward_rounded,
+                    color: _color(index, alpha: .58), size: 22),
               ),
           ],
         ],
@@ -864,7 +963,9 @@ class _RuleVisualStage extends StatelessWidget {
             height: 18 + ((_values[index % _values.length] + index) % 4) * 10.0,
             margin: const EdgeInsets.symmetric(horizontal: 4),
             decoration: BoxDecoration(
-              color: outlinedAt == index ? Colors.transparent : _color(index, alpha: .78),
+              color: outlinedAt == index
+                  ? Colors.transparent
+                  : _color(index, alpha: .78),
               border: Border.all(color: _color(index)),
               borderRadius: BorderRadius.circular(7),
             ),
@@ -884,7 +985,9 @@ class _RuleVisualStage extends StatelessWidget {
             (dot) => Container(
               width: 9,
               height: 9,
-              decoration: BoxDecoration(color: _color(index + dot, alpha: .8), shape: BoxShape.circle),
+              decoration: BoxDecoration(
+                  color: _color(index + dot, alpha: .8),
+                  shape: BoxShape.circle),
             ),
           ),
         ),
@@ -898,7 +1001,8 @@ class _RuleVisualStage extends StatelessWidget {
             width: 26,
             height: 26,
             margin: const EdgeInsets.symmetric(horizontal: 3),
-            decoration: BoxDecoration(color: _color(index + offset, alpha: .7), shape: shape),
+            decoration: BoxDecoration(
+                color: _color(index + offset, alpha: .7), shape: shape),
           ),
         ),
       );
@@ -912,7 +1016,10 @@ class _RuleVisualStage extends StatelessWidget {
           borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
           border: Border.all(color: _color(index, alpha: .62), width: 2),
         ),
-        child: Container(width: 18, height: 18, decoration: BoxDecoration(color: _color(index), shape: shape)),
+        child: Container(
+            width: 18,
+            height: 18,
+            decoration: BoxDecoration(color: _color(index), shape: shape)),
       );
 
   Widget _sharedCluster(int index) => SizedBox(
@@ -921,10 +1028,15 @@ class _RuleVisualStage extends StatelessWidget {
         child: Stack(
           alignment: Alignment.center,
           children: [
-            for (final offset in const [Offset(-15, -8), Offset(15, -8), Offset(0, 15)])
+            for (final offset in const [
+              Offset(-15, -8),
+              Offset(15, -8),
+              Offset(0, 15)
+            ])
               Transform.translate(
                 offset: offset,
-                child: Icon(motif.icon, color: _color(index, alpha: .76), size: 24),
+                child: Icon(motif.icon,
+                    color: _color(index, alpha: .76), size: 24),
               ),
           ],
         ),
@@ -956,7 +1068,9 @@ class _RuleVisualStage extends StatelessWidget {
           alignment: Alignment.center,
           children: [
             Icon(motif.icon, color: _color(index, alpha: .74), size: 34),
-            if (changed) const Positioned(right: 8, top: 7, child: Icon(Icons.star_rounded, size: 16)),
+            if (changed)
+              const Positioned(
+                  right: 8, top: 7, child: Icon(Icons.star_rounded, size: 16)),
           ],
         ),
       );
@@ -982,8 +1096,14 @@ class _RuleVisualStage extends StatelessWidget {
         child: Stack(
           alignment: Alignment.center,
           children: [
-            Positioned(left: 16, bottom: 22, child: Icon(motif.icon, color: _color(0), size: 32)),
-            Positioned(right: 16, top: 19, child: Icon(Icons.flag_rounded, color: _color(2), size: 30)),
+            Positioned(
+                left: 16,
+                bottom: 22,
+                child: Icon(motif.icon, color: _color(0), size: 32)),
+            Positioned(
+                right: 16,
+                top: 19,
+                child: Icon(Icons.flag_rounded, color: _color(2), size: 30)),
             Container(
               width: 164,
               height: 91,
@@ -995,12 +1115,14 @@ class _RuleVisualStage extends StatelessWidget {
             Positioned(
               left: 47,
               bottom: 36,
-              child: Container(width: 84, height: 4, color: _color(0, alpha: .64)),
+              child:
+                  Container(width: 84, height: 4, color: _color(0, alpha: .64)),
             ),
             Positioned(
               right: 44,
               top: 34,
-              child: Container(width: 4, height: 49, color: _color(1, alpha: .64)),
+              child:
+                  Container(width: 4, height: 49, color: _color(1, alpha: .64)),
             ),
             _slot(size: 46),
           ],
@@ -1029,7 +1151,8 @@ class _StageStimulusTrace extends StatelessWidget {
 
   List<int> get _values => values.isEmpty ? const [1, 2, 3] : values;
 
-  Color _color(int value) => palette[(value + (rule?.index ?? 0)) % palette.length];
+  Color _color(int value) =>
+      palette[(value + (rule?.index ?? 0)) % palette.length];
 
   @override
   Widget build(BuildContext context) => SizedBox(
@@ -1046,7 +1169,8 @@ class _StageStimulusTrace extends StatelessWidget {
             for (var index = 0; index < _values.length; index++) ...[
               _TraceToken(color: _color(_values[index]), value: _values[index]),
               if (index < _values.length - 1)
-                Icon(Icons.arrow_forward_rounded, color: accent.withValues(alpha: .5), size: 18),
+                Icon(Icons.arrow_forward_rounded,
+                    color: accent.withValues(alpha: .5), size: 18),
             ],
           ],
         );
@@ -1060,7 +1184,8 @@ class _StageStimulusTrace extends StatelessWidget {
                   padding: const EdgeInsets.symmetric(horizontal: 5),
                   child: Transform.rotate(
                     angle: ((value % 4) * 1.57).toDouble(),
-                    child: Icon(Icons.subdirectory_arrow_right_rounded, color: _color(value), size: 28),
+                    child: Icon(Icons.subdirectory_arrow_right_rounded,
+                        color: _color(value), size: 28),
                   ),
                 ),
               )
@@ -1076,7 +1201,8 @@ class _StageStimulusTrace extends StatelessWidget {
                   padding: const EdgeInsets.symmetric(horizontal: 6),
                   child: Transform.rotate(
                     angle: ((value % 4) * 1.57).toDouble(),
-                    child: Icon(Icons.navigation_rounded, color: _color(value), size: 25),
+                    child: Icon(Icons.navigation_rounded,
+                        color: _color(value), size: 25),
                   ),
                 ),
               )
@@ -1119,70 +1245,80 @@ class _StageStimulusTrace extends StatelessWidget {
             _TraceBin(color: _color(_values.last)),
           ],
         );
-      case VisualPuzzleKind.quantity: {
-        final count = (_values.first % 5) + 1;
-        return SizedBox(
-          width: 116,
-          height: 42,
-          child: Wrap(
-            alignment: WrapAlignment.center,
-            spacing: 7,
-            runSpacing: 5,
-            children: List.generate(
-              count,
-              (index) => _GlyphDot(color: _color(_values[index % _values.length]), size: 12),
-            ),
-          ),
-        );
-      }
-      case VisualPuzzleKind.shape: {
-        const shapes = [
-          Icons.circle_outlined,
-          Icons.change_history_rounded,
-          Icons.square_outlined,
-          Icons.hexagon_outlined,
-        ];
-        return Row(
-          mainAxisSize: MainAxisSize.min,
-          children: _values
-              .take(4)
-              .map(
-                (value) => Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 5),
-                  child: Icon(shapes[value % shapes.length], color: _color(value), size: 25),
-                ),
-              )
-              .toList(growable: false),
-        );
-      }
-      case VisualPuzzleKind.search:
-        return _TraceSearch(color: accent, values: _values, palette: palette, reveal: true);
-      case VisualPuzzleKind.memory:
-        return _TraceSearch(color: accent, values: _values, palette: palette, reveal: false);
-      case VisualPuzzleKind.repair: {
-        final gap = _values.first % 4;
-        return Row(
-          mainAxisSize: MainAxisSize.min,
-          children: List.generate(
-            4,
-            (index) => Container(
-              width: 30,
-              height: index == gap ? 4 : 8,
-              margin: const EdgeInsets.symmetric(horizontal: 3),
-              decoration: BoxDecoration(
-                color: _color(_values[index % _values.length]).withValues(alpha: index == gap ? .22 : .70),
-                borderRadius: BorderRadius.circular(4),
+      case VisualPuzzleKind.quantity:
+        {
+          final count = (_values.first % 5) + 1;
+          return SizedBox(
+            width: 116,
+            height: 42,
+            child: Wrap(
+              alignment: WrapAlignment.center,
+              spacing: 7,
+              runSpacing: 5,
+              children: List.generate(
+                count,
+                (index) => _GlyphDot(
+                    color: _color(_values[index % _values.length]), size: 12),
               ),
             ),
-          ),
-        );
-      }
+          );
+        }
+      case VisualPuzzleKind.shape:
+        {
+          const shapes = [
+            Icons.circle_outlined,
+            Icons.change_history_rounded,
+            Icons.square_outlined,
+            Icons.hexagon_outlined,
+          ];
+          return Row(
+            mainAxisSize: MainAxisSize.min,
+            children: _values
+                .take(4)
+                .map(
+                  (value) => Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 5),
+                    child: Icon(shapes[value % shapes.length],
+                        color: _color(value), size: 25),
+                  ),
+                )
+                .toList(growable: false),
+          );
+        }
+      case VisualPuzzleKind.search:
+        return _TraceSearch(
+            color: accent, values: _values, palette: palette, reveal: true);
+      case VisualPuzzleKind.memory:
+        return _TraceSearch(
+            color: accent, values: _values, palette: palette, reveal: false);
+      case VisualPuzzleKind.repair:
+        {
+          final gap = _values.first % 4;
+          return Row(
+            mainAxisSize: MainAxisSize.min,
+            children: List.generate(
+              4,
+              (index) => Container(
+                width: 30,
+                height: index == gap ? 4 : 8,
+                margin: const EdgeInsets.symmetric(horizontal: 3),
+                decoration: BoxDecoration(
+                  color: _color(_values[index % _values.length])
+                      .withValues(alpha: index == gap ? .22 : .70),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+              ),
+            ),
+          );
+        }
       case VisualPuzzleKind.precision:
         return Stack(
           alignment: Alignment.center,
           children: [
-            Container(width: 112, height: 2, color: accent.withValues(alpha: .38)),
-            Container(width: 2, height: 40, color: accent.withValues(alpha: .38)),
+            Container(
+                width: 112, height: 2, color: accent.withValues(alpha: .38)),
+            Container(
+                width: 2, height: 40, color: accent.withValues(alpha: .38)),
             Transform.translate(
               offset: Offset(((_values.first % 5 - 2) * 12).toDouble(), 0),
               child: _GlyphDot(color: _color(_values.first), size: 12),
@@ -1200,7 +1336,9 @@ class _StageStimulusTrace extends StatelessWidget {
                   width: 12,
                   height: (12 + (value % 4) * 8).toDouble(),
                   margin: const EdgeInsets.symmetric(horizontal: 4),
-                  decoration: BoxDecoration(color: _color(value), borderRadius: BorderRadius.circular(6)),
+                  decoration: BoxDecoration(
+                      color: _color(value),
+                      borderRadius: BorderRadius.circular(6)),
                 ),
               )
               .toList(growable: false),
@@ -1213,7 +1351,8 @@ class _StageStimulusTrace extends StatelessWidget {
               .map(
                 (value) => Transform.rotate(
                   angle: value.isEven ? 0 : 3.14,
-                  child: Icon(Icons.swap_horiz_rounded, color: _color(value), size: 28),
+                  child: Icon(Icons.swap_horiz_rounded,
+                      color: _color(value), size: 28),
                 ),
               )
               .toList(growable: false),
@@ -1293,13 +1432,18 @@ class _TraceSearch extends StatelessWidget {
               children: List.generate(
                 8,
                 (index) => _GlyphDot(
-                  color: palette[(values[index % values.length] + index) % palette.length]
-                      .withValues(alpha: reveal && index == values.first % 8 ? .90 : .28),
+                  color: palette[(values[index % values.length] + index) %
+                          palette.length]
+                      .withValues(
+                          alpha:
+                              reveal && index == values.first % 8 ? .90 : .28),
                   size: 9,
                 ),
               ),
             ),
-            if (!reveal) Icon(Icons.visibility_rounded, color: color.withValues(alpha: .66), size: 22),
+            if (!reveal)
+              Icon(Icons.visibility_rounded,
+                  color: color.withValues(alpha: .66), size: 22),
           ],
         ),
       );
@@ -1378,10 +1522,13 @@ class _RotationStage extends StatelessWidget {
             height: 138,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              border: Border.all(color: accent.withValues(alpha: .45), width: 2),
+              border:
+                  Border.all(color: accent.withValues(alpha: .45), width: 2),
             ),
           ),
-          Positioned(top: 2, child: Icon(Icons.refresh_rounded, color: accent, size: 22)),
+          Positioned(
+              top: 2,
+              child: Icon(Icons.refresh_rounded, color: accent, size: 22)),
           target,
         ],
       );
@@ -1432,7 +1579,8 @@ class _PatternStage extends StatelessWidget {
                 height: 20,
                 margin: const EdgeInsets.symmetric(horizontal: 3),
                 decoration: BoxDecoration(
-                  color: colors[index % colors.length].withValues(alpha: index == 4 ? .18 : .70),
+                  color: colors[index % colors.length]
+                      .withValues(alpha: index == 4 ? .18 : .70),
                   borderRadius: BorderRadius.circular(index.isEven ? 10 : 3),
                 ),
               ),
@@ -1501,7 +1649,8 @@ class _ShapeStage extends StatelessWidget {
             width: 128,
             height: 112,
             decoration: BoxDecoration(
-              border: Border.all(color: accent.withValues(alpha: .38), width: 3),
+              border:
+                  Border.all(color: accent.withValues(alpha: .38), width: 3),
               borderRadius: BorderRadius.circular(30),
             ),
           ),
@@ -1529,7 +1678,8 @@ class _SearchStage extends StatelessWidget {
               runSpacing: 14,
               children: List.generate(
                 8,
-                (index) => _StageDot(color: accent.withValues(alpha: index == 5 ? .70 : .20)),
+                (index) => _StageDot(
+                    color: accent.withValues(alpha: index == 5 ? .70 : .20)),
               ),
             ),
           ),
@@ -1560,7 +1710,8 @@ class _MemoryStage extends StatelessWidget {
           Positioned(
             right: 14,
             top: 10,
-            child: Icon(Icons.visibility_rounded, color: accent.withValues(alpha: .55), size: 20),
+            child: Icon(Icons.visibility_rounded,
+                color: accent.withValues(alpha: .55), size: 20),
           ),
         ],
       );
@@ -1576,8 +1727,12 @@ class _RepairStage extends StatelessWidget {
   Widget build(BuildContext context) => Stack(
         alignment: Alignment.center,
         children: [
-          Positioned(left: 10, child: _StageRail(color: accent.withValues(alpha: .38))),
-          Positioned(right: 10, child: _StageRail(color: accent.withValues(alpha: .38))),
+          Positioned(
+              left: 10,
+              child: _StageRail(color: accent.withValues(alpha: .38))),
+          Positioned(
+              right: 10,
+              child: _StageRail(color: accent.withValues(alpha: .38))),
           target,
         ],
       );
@@ -1593,8 +1748,10 @@ class _PrecisionStage extends StatelessWidget {
   Widget build(BuildContext context) => Stack(
         alignment: Alignment.center,
         children: [
-          Container(width: 150, height: 2, color: accent.withValues(alpha: .32)),
-          Container(width: 2, height: 120, color: accent.withValues(alpha: .32)),
+          Container(
+              width: 150, height: 2, color: accent.withValues(alpha: .32)),
+          Container(
+              width: 2, height: 120, color: accent.withValues(alpha: .32)),
           target,
         ],
       );
@@ -1672,7 +1829,9 @@ class _StageRail extends StatelessWidget {
         width: 38,
         height: 5,
         margin: const EdgeInsets.symmetric(horizontal: 4),
-        decoration: BoxDecoration(color: color.withValues(alpha: .56), borderRadius: BorderRadius.circular(4)),
+        decoration: BoxDecoration(
+            color: color.withValues(alpha: .56),
+            borderRadius: BorderRadius.circular(4)),
       );
 }
 
@@ -1706,7 +1865,8 @@ class _DotCluster extends StatelessWidget {
           alignment: WrapAlignment.center,
           spacing: 5,
           runSpacing: 5,
-          children: List.generate(count, (_) => _StageDot(color: color.withValues(alpha: .7))),
+          children: List.generate(
+              count, (_) => _StageDot(color: color.withValues(alpha: .7))),
         ),
       );
 }
@@ -1742,12 +1902,19 @@ class _PictureToken extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final shapes = [BoxShape.circle, BoxShape.rectangle, BoxShape.circle, BoxShape.rectangle, BoxShape.circle];
+    final shapes = [
+      BoxShape.circle,
+      BoxShape.rectangle,
+      BoxShape.circle,
+      BoxShape.rectangle,
+      BoxShape.circle
+    ];
     final rotations = [-.18, .13, .0, -.08, .18];
     final colors = motif.palette;
     final safeVariant = variant.clamp(0, 15).toInt();
     final safeIndex = safeVariant % colors.length;
-    final shapeIndex = (safeVariant + kind.index + (rule?.index ?? 0)) % shapes.length;
+    final shapeIndex =
+        (safeVariant + kind.index + (rule?.index ?? 0)) % shapes.length;
     final rotation = kind == VisualPuzzleKind.rotate
         ? [0.0, .25, .5, .75][safeVariant % 4]
         : rotations[shapeIndex];
@@ -1758,30 +1925,33 @@ class _PictureToken extends StatelessWidget {
         alignment: Alignment.center,
         children: [
           Container(
-              width: size,
-              height: size,
-              decoration: BoxDecoration(
-                color: colors[safeIndex].withValues(alpha: .20),
-                shape: kind == VisualPuzzleKind.rotate ? BoxShape.circle : shapes[shapeIndex],
-                borderRadius: kind == VisualPuzzleKind.rotate || shapes[shapeIndex] == BoxShape.circle
-                    ? null
-                    : BorderRadius.circular(20),
-                border: Border.all(color: colors[safeIndex], width: 3),
-              ),
-              child: style == VisualStylePreference.simpleShapes.name &&
-                      kind == VisualPuzzleKind.match &&
-                      rule == null
+            width: size,
+            height: size,
+            decoration: BoxDecoration(
+              color: colors[safeIndex].withValues(alpha: .20),
+              shape: kind == VisualPuzzleKind.rotate
+                  ? BoxShape.circle
+                  : shapes[shapeIndex],
+              borderRadius: kind == VisualPuzzleKind.rotate ||
+                      shapes[shapeIndex] == BoxShape.circle
                   ? null
-                  : _TokenGlyph(
-                      kind: kind,
-                      motif: motif.icon,
-                      color: colors[safeIndex],
-                      palette: colors,
-                      variant: safeVariant,
-                      stimulus: stimulus,
-                      rule: rule,
-                      size: size,
-                    ),
+                  : BorderRadius.circular(20),
+              border: Border.all(color: colors[safeIndex], width: 3),
+            ),
+            child: style == VisualStylePreference.simpleShapes.name &&
+                    kind == VisualPuzzleKind.match &&
+                    rule == null
+                ? null
+                : _TokenGlyph(
+                    kind: kind,
+                    motif: motif.icon,
+                    color: colors[safeIndex],
+                    palette: colors,
+                    variant: safeVariant,
+                    stimulus: stimulus,
+                    rule: rule,
+                    size: size,
+                  ),
           ),
           if (repeated)
             Positioned(
@@ -1794,7 +1964,8 @@ class _PictureToken extends StatelessWidget {
                     width: 6,
                     height: 6,
                     margin: const EdgeInsets.symmetric(horizontal: 2),
-                    decoration: BoxDecoration(color: colors[safeIndex], shape: BoxShape.circle),
+                    decoration: BoxDecoration(
+                        color: colors[safeIndex], shape: BoxShape.circle),
                   ),
                 ),
               ),
@@ -1843,7 +2014,8 @@ class _TokenGlyph extends StatelessWidget {
             Positioned(
               right: size * .08,
               bottom: size * .08,
-              child: Icon(motif, color: color.withValues(alpha: .62), size: iconSize * .38),
+              child: Icon(motif,
+                  color: color.withValues(alpha: .62), size: iconSize * .38),
             ),
         ],
       );
@@ -1861,7 +2033,8 @@ class _TokenGlyph extends StatelessWidget {
               top: size * .12,
               child: Transform.rotate(
                 angle: ((variant % 4) * 1.57).toDouble(),
-                child: Icon(Icons.arrow_upward_rounded, color: color, size: size * .25),
+                child: Icon(Icons.arrow_upward_rounded,
+                    color: color, size: size * .25),
               ),
             ),
           ],
@@ -1888,8 +2061,12 @@ class _TokenGlyph extends StatelessWidget {
         );
       case VisualPuzzleKind.shape:
         return Icon(
-          [Icons.circle_outlined, Icons.change_history_rounded, Icons.square_outlined, Icons.hexagon_outlined]
-              [variant % 4],
+          [
+            Icons.circle_outlined,
+            Icons.change_history_rounded,
+            Icons.square_outlined,
+            Icons.hexagon_outlined
+          ][variant % 4],
           color: color,
           size: iconSize,
         );
@@ -1897,7 +2074,8 @@ class _TokenGlyph extends StatelessWidget {
         return Stack(
           alignment: Alignment.center,
           children: [
-            Icon(motif, color: color.withValues(alpha: .55), size: iconSize * .74),
+            Icon(motif,
+                color: color.withValues(alpha: .55), size: iconSize * .74),
             Icon(Icons.search_rounded, color: color, size: iconSize),
           ],
         );
@@ -1906,7 +2084,9 @@ class _TokenGlyph extends StatelessWidget {
           alignment: Alignment.center,
           children: [
             Icon(Icons.visibility_rounded, color: color, size: iconSize),
-            Positioned(bottom: size * .14, child: _GlyphDot(color: color, size: size * .10)),
+            Positioned(
+                bottom: size * .14,
+                child: _GlyphDot(color: color, size: size * .10)),
           ],
         );
       case VisualPuzzleKind.repair:
@@ -2026,13 +2206,15 @@ class _TokenGlyph extends StatelessWidget {
         VisualPuzzleRule.chooseStoryNext ||
         VisualPuzzleRule.arrangeStoryPanels ||
         VisualPuzzleRule.choosePerspectiveOutcome ||
-        VisualPuzzleRule.completeVisualComposition => true,
+        VisualPuzzleRule.completeVisualComposition =>
+          true,
         _ => false,
       };
 }
 
 class _SequenceGlyph extends StatelessWidget {
-  const _SequenceGlyph({required this.color, required this.variant, required this.size});
+  const _SequenceGlyph(
+      {required this.color, required this.variant, required this.size});
 
   final Color color;
   final int variant;
@@ -2055,7 +2237,8 @@ class _SequenceGlyph extends StatelessWidget {
 }
 
 class _DistanceGlyph extends StatelessWidget {
-  const _DistanceGlyph({required this.color, required this.variant, required this.size});
+  const _DistanceGlyph(
+      {required this.color, required this.variant, required this.size});
 
   final Color color;
   final int variant;
@@ -2087,7 +2270,9 @@ class _PatternGlyph extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final values = stimulus.isEmpty ? [variant, variant + 1, variant + 2, variant] : stimulus;
+    final values = stimulus.isEmpty
+        ? [variant, variant + 1, variant + 2, variant]
+        : stimulus;
     return Wrap(
       alignment: WrapAlignment.center,
       spacing: size * .055,
@@ -2099,7 +2284,8 @@ class _PatternGlyph extends StatelessWidget {
           height: size * .17,
           decoration: BoxDecoration(
             color: color.withValues(alpha: .78),
-            borderRadius: BorderRadius.circular(value.isEven ? size * .09 : size * .025),
+            borderRadius:
+                BorderRadius.circular(value.isEven ? size * .09 : size * .025),
           ),
         );
       }).toList(growable: false),
@@ -2108,7 +2294,8 @@ class _PatternGlyph extends StatelessWidget {
 }
 
 class _SortGlyph extends StatelessWidget {
-  const _SortGlyph({required this.palette, required this.variant, required this.size});
+  const _SortGlyph(
+      {required this.palette, required this.variant, required this.size});
 
   final List<Color> palette;
   final int variant;
@@ -2120,7 +2307,8 @@ class _SortGlyph extends StatelessWidget {
         children: [
           _GlyphDot(color: palette[variant % palette.length], size: size * .18),
           SizedBox(width: size * .08),
-          _GlyphDot(color: palette[(variant + 1) % palette.length], size: size * .18),
+          _GlyphDot(
+              color: palette[(variant + 1) % palette.length], size: size * .18),
         ],
       );
 }
@@ -2155,7 +2343,8 @@ class _QuantityGlyph extends StatelessWidget {
 }
 
 class _RhythmGlyph extends StatelessWidget {
-  const _RhythmGlyph({required this.color, required this.variant, required this.size});
+  const _RhythmGlyph(
+      {required this.color, required this.variant, required this.size});
 
   final Color color;
   final int variant;
@@ -2171,7 +2360,8 @@ class _RhythmGlyph extends StatelessWidget {
             width: size * .10,
             height: size * (.16 + ((variant + index) % 4) * .09),
             margin: EdgeInsets.symmetric(horizontal: size * .025),
-            decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(size * .06)),
+            decoration: BoxDecoration(
+                color: color, borderRadius: BorderRadius.circular(size * .06)),
           ),
         ),
       );
@@ -2222,7 +2412,8 @@ class _GroundedPictureChoice extends StatelessWidget {
         VisualPuzzleRule.arrangeStoryPanels ||
         VisualPuzzleRule.findSceneChange ||
         VisualPuzzleRule.matchEmotionIcon ||
-        VisualPuzzleRule.choosePerspectiveOutcome => true,
+        VisualPuzzleRule.choosePerspectiveOutcome =>
+          true,
         _ => false,
       };
 
@@ -2232,57 +2423,80 @@ class _GroundedPictureChoice extends StatelessWidget {
         VisualPuzzleRule.chooseLargerDotCloud ||
         VisualPuzzleRule.matchPhonologicalPattern ||
         VisualPuzzleRule.replayToneSequence ||
-        VisualPuzzleRule.matchMelodyPattern => true,
+        VisualPuzzleRule.matchMelodyPattern =>
+          true,
         _ => false,
       };
 
   bool get _isBinChoice => switch (rule) {
         VisualPuzzleRule.sortMultipleAttributes ||
         VisualPuzzleRule.discoverVisualRule ||
-        VisualPuzzleRule.findSharedProperty => true,
+        VisualPuzzleRule.findSharedProperty =>
+          true,
         _ => false,
       };
 
   @override
   Widget build(BuildContext context) {
-    final width = _isPanelChoice ? 124.0 : _isRoundChoice ? 96.0 : _isBinChoice ? 102.0 : 108.0;
-    final height = _isPanelChoice ? 92.0 : _isRoundChoice ? 96.0 : _isBinChoice ? 108.0 : 116.0;
+    final width = _isPanelChoice
+        ? 124.0
+        : _isRoundChoice
+            ? 96.0
+            : _isBinChoice
+                ? 102.0
+                : 108.0;
+    final height = _isPanelChoice
+        ? 92.0
+        : _isRoundChoice
+            ? 96.0
+            : _isBinChoice
+                ? 108.0
+                : 116.0;
     final radius = _isRoundChoice
         ? BorderRadius.circular(56)
         : _isBinChoice
-            ? const BorderRadius.vertical(top: Radius.circular(26), bottom: Radius.circular(12))
+            ? const BorderRadius.vertical(
+                top: Radius.circular(26), bottom: Radius.circular(12))
             : BorderRadius.circular(_isPanelChoice ? 12 : 22);
     return Semantics(
-        button: true,
-        child: GestureDetector(
-          key: ValueKey('visual-choice-${rule?.name ?? 'generic'}-$choiceIndex'),
-          onTap: onTap,
-          onHorizontalDragEnd: interaction == InteractionPreference.swiping ? (_) => onTap() : null,
-          onPanEnd: interaction == InteractionPreference.dragging ? (_) => onTap() : null,
-          child: AnimatedScale(
+      button: true,
+      child: GestureDetector(
+        key: ValueKey('visual-choice-${rule?.name ?? 'generic'}-$choiceIndex'),
+        onTap: onTap,
+        onHorizontalDragEnd: interaction == InteractionPreference.swiping
+            ? (_) => onTap()
+            : null,
+        onPanEnd: interaction == InteractionPreference.dragging
+            ? (_) => onTap()
+            : null,
+        child: AnimatedScale(
+          duration: const Duration(milliseconds: 280),
+          scale: selected && animation == 'snap' ? .84 : 1,
+          child: AnimatedRotation(
             duration: const Duration(milliseconds: 280),
-            scale: selected && animation == 'snap' ? .84 : 1,
-            child: AnimatedRotation(
+            turns: selected && (animation == 'roll' || animation == 'rotate')
+                ? .25
+                : 0,
+            child: AnimatedSlide(
               duration: const Duration(milliseconds: 280),
-              turns: selected && (animation == 'roll' || animation == 'rotate') ? .25 : 0,
-              child: AnimatedSlide(
-                duration: const Duration(milliseconds: 280),
-                offset: selected && animation == 'slide' ? const Offset(.35, 0) : Offset.zero,
-                child: Container(
-                  width: width,
-                  height: height,
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: .72),
-                    borderRadius: radius,
-                    border: Border.all(color: color.withValues(alpha: .22)),
-                  ),
-                  child: token,
+              offset: selected && animation == 'slide'
+                  ? const Offset(.35, 0)
+                  : Offset.zero,
+              child: Container(
+                width: width,
+                height: height,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: .72),
+                  borderRadius: radius,
+                  border: Border.all(color: color.withValues(alpha: .22)),
                 ),
+                child: token,
               ),
             ),
           ),
         ),
-      );
+      ),
+    );
   }
 }

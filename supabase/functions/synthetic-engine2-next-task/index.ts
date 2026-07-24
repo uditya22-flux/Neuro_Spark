@@ -1791,17 +1791,15 @@ async function answerTask(
   }
   const solved = request.optionId === correctOption;
   await recordAttempt(serviceClient, session, task, request.optionId, solved, request.telemetry);
-  if (!solved) {
-    // Do not advance or record a final task event. Flutter retains this exact
-    // task; its next answer carries the aggregate fictional telemetry.
-    return progressResponse(session, false);
-  }
+  // Every deliberate selection is a completed observation. A non-matching
+  // option is recorded as `correct: false` and advances quietly, so no child
+  // is held on one activity waiting to discover a hidden answer.
   return finalizeTaskResponse(
     serviceClient,
     session,
     task,
     await aggregateAttempts(serviceClient, task.id),
-    { correct: true },
+    { correct: solved },
   );
 }
 

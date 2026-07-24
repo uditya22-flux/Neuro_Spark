@@ -25,7 +25,8 @@ class SocialCreativeInteractionBoard extends StatefulWidget {
         PlayMechanic.emotionRecognition ||
         PlayMechanic.perspectiveTaking ||
         PlayMechanic.turnTakingStrategy ||
-        PlayMechanic.visualArtisticComposition => true,
+        PlayMechanic.visualArtisticComposition =>
+          true,
         _ => false,
       };
 
@@ -37,6 +38,8 @@ class SocialCreativeInteractionBoard extends StatefulWidget {
 class _SocialCreativeInteractionBoardState
     extends State<SocialCreativeInteractionBoard> {
   bool _busy = false;
+  Timer? _choiceSettleTimer;
+  String? _draftChoice;
   final Set<int> _placedPieces = <int>{};
   final Set<int> _occupiedCells = <int>{};
   int _childTurns = 0;
@@ -44,15 +47,29 @@ class _SocialCreativeInteractionBoardState
   PlayMechanic get _mechanic => widget.task.mechanics.single;
   Color get _accent => Theme.of(context).colorScheme.primary;
 
-  Future<void> _choose(String option) async {
+  static const _choiceSettleWindow = Duration(milliseconds: 1500);
+
+  void _choose(String option) {
     if (_busy) return;
     if (widget.task.preferHaptics) HapticFeedback.selectionClick();
+    setState(() => _draftChoice = option);
+    _choiceSettleTimer?.cancel();
+    _choiceSettleTimer = Timer(_choiceSettleWindow, _submitDraftChoice);
+  }
+
+  Future<void> _submitDraftChoice() async {
+    if (!mounted || _busy || _draftChoice == null) return;
+    final choice = _draftChoice!;
     setState(() => _busy = true);
-    await Future<void>.delayed(const Duration(milliseconds: 180));
-    if (!mounted) return;
-    final solved = await widget.onChoice(option);
-    if (!mounted || solved) return;
+    final advanced = await widget.onChoice(choice);
+    if (!mounted || advanced) return;
     setState(() => _busy = false);
+  }
+
+  @override
+  void dispose() {
+    _choiceSettleTimer?.cancel();
+    super.dispose();
   }
 
   void _completeGentleComposition() => _choose(widget.task.correctOption);
@@ -67,7 +84,8 @@ class _SocialCreativeInteractionBoardState
           color: _accent.withValues(alpha: .08),
           borderRadius: BorderRadius.circular(28),
           border: Border.all(
-            color: _accent.withValues(alpha: widget.highlightTarget ? .90 : .30),
+            color:
+                _accent.withValues(alpha: widget.highlightTarget ? .90 : .30),
             width: widget.highlightTarget ? 3 : 1.5,
           ),
         ),
@@ -90,7 +108,8 @@ class _SocialCreativeInteractionBoardState
     return Column(
       mainAxisAlignment: MainAxisAlignment.spaceEvenly,
       children: [
-        Icon(Icons.face_rounded, size: 108, color: _accent.withValues(alpha: .72)),
+        Icon(Icons.face_rounded,
+            size: 108, color: _accent.withValues(alpha: .72)),
         Wrap(
           spacing: 16,
           runSpacing: 16,
@@ -173,7 +192,9 @@ class _SocialCreativeInteractionBoardState
                   ),
                   child: occupied
                       ? Icon(
-                          _childTurns.isOdd ? Icons.circle_outlined : Icons.close_rounded,
+                          _childTurns.isOdd
+                              ? Icons.circle_outlined
+                              : Icons.close_rounded,
                           color: _tone(index),
                           size: 42,
                         )
@@ -188,13 +209,18 @@ class _SocialCreativeInteractionBoardState
   }
 
   void _playTurn(int index) {
+    if (_busy) return;
     setState(() {
       _occupiedCells.add(index);
       _childTurns += 1;
-      final reply = List<int>.generate(9, (cell) => cell)
-          .firstWhere((cell) => !_occupiedCells.contains(cell), orElse: () => -1);
+      final reply = List<int>.generate(9, (cell) => cell).firstWhere(
+          (cell) => !_occupiedCells.contains(cell),
+          orElse: () => -1);
       if (reply >= 0 && _childTurns < 3) _occupiedCells.add(reply);
     });
+    // A short turn exchange is the complete response. The final choice is
+    // settled briefly before the next activity so it never waits for a hidden
+    // perfect move, while still allowing a real turn-taking interaction.
     if (_childTurns >= 3 || _occupiedCells.length == 9) {
       _choose(widget.task.correctOption);
     }
@@ -211,8 +237,14 @@ class _SocialCreativeInteractionBoardState
               final placed = _placedPieces.contains(index);
               return DragTarget<int>(
                 onAcceptWithDetails: (details) {
+                  if (_busy) return;
                   setState(() => _placedPieces.add(details.data));
-                  if (_placedPieces.length >= 4) _completeGentleComposition();
+                  if (_placedPieces.length >= 4) {
+                    // This is open-ended composition. Four placed pieces make
+                    // a complete response; the quiet settle window leaves a
+                    // moment for the child to see and adjust the composition.
+                    _completeGentleComposition();
+                  }
                 },
                 builder: (context, accepted, rejected) => Container(
                   width: 76,
@@ -221,8 +253,10 @@ class _SocialCreativeInteractionBoardState
                     shape: index.isEven ? BoxShape.circle : BoxShape.rectangle,
                     color: placed
                         ? _tone(index).withValues(alpha: .68)
-                        : _tone(index).withValues(alpha: accepted.isNotEmpty ? .35 : .12),
-                    borderRadius: index.isEven ? null : BorderRadius.circular(16),
+                        : _tone(index)
+                            .withValues(alpha: accepted.isNotEmpty ? .35 : .12),
+                    borderRadius:
+                        index.isEven ? null : BorderRadius.circular(16),
                     border: Border.all(color: _tone(index), width: 2),
                   ),
                 ),
@@ -233,7 +267,9 @@ class _SocialCreativeInteractionBoardState
             spacing: 14,
             alignment: WrapAlignment.center,
             children: List<Widget>.generate(4, (index) {
-              if (_placedPieces.contains(index)) return const SizedBox(width: 48, height: 48);
+              if (_placedPieces.contains(index)) {
+                return const SizedBox(width: 48, height: 48);
+              }
               return Draggable<int>(
                 data: index,
                 feedback: _piece(index, elevated: true),
@@ -264,7 +300,8 @@ class _SocialCreativeInteractionBoardState
         width: 50,
         height: 50,
         alignment: Alignment.center,
-        decoration: BoxDecoration(shape: BoxShape.circle, color: color.withValues(alpha: .16)),
+        decoration: BoxDecoration(
+            shape: BoxShape.circle, color: color.withValues(alpha: .16)),
         child: Icon(icon, color: color, size: 34),
       );
 
@@ -275,7 +312,12 @@ class _SocialCreativeInteractionBoardState
   }
 
   Color _tone(int index) {
-    const colors = [Color(0xff5f7fa8), Color(0xff7a9f88), Color(0xffc69358), Color(0xffb4778f)];
+    const colors = [
+      Color(0xff5f7fa8),
+      Color(0xff7a9f88),
+      Color(0xffc69358),
+      Color(0xffb4778f)
+    ];
     return colors[index % colors.length];
   }
 }

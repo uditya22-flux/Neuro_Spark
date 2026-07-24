@@ -40,9 +40,11 @@ class SpatialTemporalInteractionBoard extends StatelessWidget {
 
   /// Allows a dispatcher to use this board only for the mechanics it owns.
   static bool supports(PuzzleSpec task) =>
-      task.mechanics.length == 1 && supportedMechanics.contains(task.mechanics.single);
+      task.mechanics.length == 1 &&
+      supportedMechanics.contains(task.mechanics.single);
 
-  static bool supportsMechanic(PlayMechanic mechanic) => supportedMechanics.contains(mechanic);
+  static bool supportsMechanic(PlayMechanic mechanic) =>
+      supportedMechanics.contains(mechanic);
 
   @override
   Widget build(BuildContext context) {
@@ -110,7 +112,8 @@ class SpatialTemporalInteractionBoard extends StatelessWidget {
 
 typedef _ChoiceCallback = FutureOr<bool> Function(String choice);
 
-Future<bool> _sendChoice(_ChoiceCallback callback, String choice) async => await callback(choice);
+Future<bool> _sendChoice(_ChoiceCallback callback, String choice) async =>
+    await callback(choice);
 
 List<String> _visibleOptions(PuzzleSpec task) {
   if (task.options.isEmpty) return const [];
@@ -259,13 +262,15 @@ class _MentalRotationBoardState extends State<_MentalRotationBoard> {
 
   void _start(DragStartDetails details, Size size) {
     final center = Offset(size.width / 2, size.height / 2);
-    _lastAngle = math.atan2(details.localPosition.dy - center.dy, details.localPosition.dx - center.dx);
+    _lastAngle = math.atan2(details.localPosition.dy - center.dy,
+        details.localPosition.dx - center.dx);
   }
 
   void _rotate(DragUpdateDetails details, Size size) {
     if (_submitting) return;
     final center = Offset(size.width / 2, size.height / 2);
-    final current = math.atan2(details.localPosition.dy - center.dy, details.localPosition.dx - center.dx);
+    final current = math.atan2(details.localPosition.dy - center.dy,
+        details.localPosition.dx - center.dx);
     var delta = current - _lastAngle;
     if (delta > math.pi) delta -= math.pi * 2;
     if (delta < -math.pi) delta += math.pi * 2;
@@ -295,14 +300,17 @@ class _MentalRotationBoardState extends State<_MentalRotationBoard> {
     final palette = _paletteFor(widget.task);
     final accent = palette.first;
     final options = _visibleOptions(widget.task);
-    final targetTurns = options.isEmpty ? 0.0 : _correctIndex(widget.task, options) / options.length;
+    final targetTurns = options.isEmpty
+        ? 0.0
+        : _correctIndex(widget.task, options) / options.length;
     return _InteractionFrame(
       color: accent,
       highlighted: widget.highlightTarget,
       child: LayoutBuilder(
         builder: (context, constraints) {
           final side = math
-              .min(constraints.maxWidth.isFinite ? constraints.maxWidth : 250, 250.0)
+              .min(constraints.maxWidth.isFinite ? constraints.maxWidth : 250,
+                  250.0)
               .toDouble();
           final size = Size(side, side);
           return Center(
@@ -317,7 +325,8 @@ class _MentalRotationBoardState extends State<_MentalRotationBoard> {
                     height: side * .92,
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
-                      border: Border.all(color: accent.withValues(alpha: .30), width: 3),
+                      border: Border.all(
+                          color: accent.withValues(alpha: .30), width: 3),
                     ),
                   ),
                   Positioned(
@@ -344,14 +353,16 @@ class _MentalRotationBoardState extends State<_MentalRotationBoard> {
                         child: AnimatedRotation(
                           duration: const Duration(milliseconds: 80),
                           turns: _turns,
-                          child: _RotationGlyph(color: accent, angle: 0, size: side * .42),
+                          child: _RotationGlyph(
+                              color: accent, angle: 0, size: side * .42),
                         ),
                       ),
                     ),
                   ),
                   Positioned(
                     right: 8,
-                    child: Icon(Icons.rotate_right_rounded, color: accent.withValues(alpha: .68), size: 32),
+                    child: Icon(Icons.rotate_right_rounded,
+                        color: accent.withValues(alpha: .68), size: 32),
                   ),
                 ],
               ),
@@ -364,7 +375,8 @@ class _MentalRotationBoardState extends State<_MentalRotationBoard> {
 }
 
 class _RotationGlyph extends StatelessWidget {
-  const _RotationGlyph({required this.color, required this.angle, required this.size});
+  const _RotationGlyph(
+      {required this.color, required this.angle, required this.size});
 
   final Color color;
   final double angle;
@@ -404,7 +416,8 @@ class _RotationGlyph extends StatelessWidget {
         decoration: BoxDecoration(
           color: color,
           borderRadius: BorderRadius.circular(size * .18),
-          border: Border.all(color: Colors.white.withValues(alpha: .65), width: 2),
+          border:
+              Border.all(color: Colors.white.withValues(alpha: .65), width: 2),
         ),
       );
 }
@@ -546,7 +559,9 @@ class _PatternCell extends StatelessWidget {
         height: 62,
         alignment: Alignment.center,
         decoration: BoxDecoration(
-          color: missing ? color.withValues(alpha: .05) : color.withValues(alpha: .13),
+          color: missing
+              ? color.withValues(alpha: .05)
+              : color.withValues(alpha: .13),
           borderRadius: BorderRadius.circular(13),
           border: Border.all(
             color: color.withValues(alpha: highlighted ? .95 : .42),
@@ -554,13 +569,15 @@ class _PatternCell extends StatelessWidget {
           ),
         ),
         child: missing
-            ? Icon(Icons.add_rounded, color: color.withValues(alpha: .65), size: 31)
+            ? Icon(Icons.add_rounded,
+                color: color.withValues(alpha: .65), size: 31)
             : _PatternGlyph(variant: variant, color: color, size: 34),
       );
 }
 
 class _PatternGlyph extends StatelessWidget {
-  const _PatternGlyph({required this.variant, required this.color, required this.size});
+  const _PatternGlyph(
+      {required this.variant, required this.color, required this.size});
 
   final int variant;
   final Color color;
@@ -571,14 +588,16 @@ class _PatternGlyph extends StatelessWidget {
         0 => Icon(Icons.circle_rounded, color: color, size: size),
         1 => Transform.rotate(
             angle: math.pi / 4,
-            child: Container(width: size * .72, height: size * .72, color: color),
+            child:
+                Container(width: size * .72, height: size * .72, color: color),
           ),
         2 => Icon(Icons.change_history_rounded, color: color, size: size),
         3 => Icon(Icons.star_rounded, color: color, size: size),
         _ => Container(
             width: size * .78,
             height: size * .78,
-            decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(size * .18)),
+            decoration: BoxDecoration(
+                color: color, borderRadius: BorderRadius.circular(size * .18)),
           ),
       };
 }
@@ -626,7 +645,8 @@ class _PointCloudBoardState extends State<_PointCloudBoard> {
     final points = _projectPointCloud(size: size, yaw: _yaw, pitch: _pitch);
     _ProjectedPoint? hit;
     for (final point in points.reversed) {
-      if ((point.position - details.localPosition).distance <= point.radius + 13) {
+      if ((point.position - details.localPosition).distance <=
+          point.radius + 13) {
         hit = point;
         break;
       }
@@ -634,7 +654,9 @@ class _PointCloudBoardState extends State<_PointCloudBoard> {
     if (hit == null) return;
     final options = _visibleOptions(widget.task);
     if (options.isEmpty) return;
-    final choice = hit.isOutlier ? widget.task.correctOption : _wrongOption(widget.task, options);
+    final choice = hit.isOutlier
+        ? widget.task.correctOption
+        : _wrongOption(widget.task, options);
     if (choice == null) return;
     setState(() => _submitting = true);
     final solved = await _sendChoice(widget.onChoice, choice);
@@ -652,7 +674,8 @@ class _PointCloudBoardState extends State<_PointCloudBoard> {
       child: LayoutBuilder(
         builder: (context, constraints) {
           final side = math
-              .min(constraints.maxWidth.isFinite ? constraints.maxWidth : 280, 280.0)
+              .min(constraints.maxWidth.isFinite ? constraints.maxWidth : 280,
+                  280.0)
               .toDouble();
           final size = Size(side, side);
           return Center(
@@ -741,12 +764,14 @@ List<_ProjectedPoint> _projectPointCloud({
     final depth = source.y * sinPitch + z * cosPitch;
     final perspective = .78 + (depth + 1) * .17;
     return _ProjectedPoint(
-      position: center + Offset(x * scale * perspective, y * scale * perspective),
+      position:
+          center + Offset(x * scale * perspective, y * scale * perspective),
       depth: depth,
       radius: 4.5 + (depth + 1) * 3.4 + (index == 11 ? 4 : 0),
       isOutlier: index == 11,
     );
-  })..sort((a, b) => a.depth.compareTo(b.depth));
+  })
+    ..sort((a, b) => a.depth.compareTo(b.depth));
 }
 
 class _PointCloudPainter extends CustomPainter {
@@ -776,12 +801,15 @@ class _PointCloudPainter extends CustomPainter {
         ..style = PaintingStyle.stroke
         ..strokeWidth = highlighted ? 3 : 2,
     );
-    for (final point in _projectPointCloud(size: size, yaw: yaw, pitch: pitch)) {
+    for (final point
+        in _projectPointCloud(size: size, yaw: yaw, pitch: pitch)) {
       final color = point.isOutlier ? outlier : regular;
       canvas.drawCircle(
         point.position,
         point.radius,
-        Paint()..color = color.withValues(alpha: point.isOutlier ? .98 : .32 + (point.depth + 1) * .18),
+        Paint()
+          ..color = color.withValues(
+              alpha: point.isOutlier ? .98 : .32 + (point.depth + 1) * .18),
       );
       if (point.isOutlier) {
         canvas.drawCircle(
@@ -841,7 +869,8 @@ class _RouteNavigationBoardState extends State<_RouteNavigationBoard> {
     if (oldWidget.task.id != widget.task.id) _reset();
   }
 
-  Offset _normalise(Offset point, Size size) => Offset(point.dx / size.width, point.dy / size.height);
+  Offset _normalise(Offset point, Size size) =>
+      Offset(point.dx / size.width, point.dy / size.height);
 
   void _start(DragStartDetails details, Size size) {
     if (_submitting) return;
@@ -885,7 +914,8 @@ class _RouteNavigationBoardState extends State<_RouteNavigationBoard> {
     final options = _visibleOptions(widget.task);
     if (options.isEmpty) return;
     setState(() => _submitting = true);
-    final solved = await _sendChoice(widget.onChoice, widget.task.correctOption);
+    final solved =
+        await _sendChoice(widget.onChoice, widget.task.correctOption);
     if (!mounted || solved) return;
     setState(() {
       _submitting = false;
@@ -925,7 +955,8 @@ class _RouteNavigationBoardState extends State<_RouteNavigationBoard> {
       child: LayoutBuilder(
         builder: (context, constraints) {
           final width = math
-              .min(constraints.maxWidth.isFinite ? constraints.maxWidth : 360, 360.0)
+              .min(constraints.maxWidth.isFinite ? constraints.maxWidth : 360,
+                  360.0)
               .toDouble();
           final size = Size(width, width * .64);
           return Center(
@@ -958,7 +989,9 @@ double _distanceToSegment(Offset point, Offset start, Offset end) {
   final vector = end - start;
   final lengthSquared = vector.dx * vector.dx + vector.dy * vector.dy;
   if (lengthSquared == 0) return (point - start).distance;
-  final fraction = (((point - start).dx * vector.dx) + ((point - start).dy * vector.dy)) / lengthSquared;
+  final fraction =
+      (((point - start).dx * vector.dx) + ((point - start).dy * vector.dy)) /
+          lengthSquared;
   final nearest = start + vector * fraction.clamp(0.0, 1.0).toDouble();
   return (point - nearest).distance;
 }
@@ -978,11 +1011,13 @@ class _RouteMapPainter extends CustomPainter {
   final Color secondary;
   final bool highlightGoal;
 
-  Offset _scale(Offset point, Size size) => Offset(point.dx * size.width, point.dy * size.height);
+  Offset _scale(Offset point, Size size) =>
+      Offset(point.dx * size.width, point.dy * size.height);
 
   @override
   void paint(Canvas canvas, Size size) {
-    final outer = RRect.fromRectAndRadius(Offset.zero & size, const Radius.circular(22));
+    final outer =
+        RRect.fromRectAndRadius(Offset.zero & size, const Radius.circular(22));
     canvas.drawRRect(outer, Paint()..color = color.withValues(alpha: .06));
 
     final wallPaint = Paint()
@@ -1002,7 +1037,8 @@ class _RouteMapPainter extends CustomPainter {
       canvas.drawLine(_scale(wall[0], size), _scale(wall[1], size), wallPaint);
     }
 
-    final routePath = Path()..moveTo(_scale(route.first, size).dx, _scale(route.first, size).dy);
+    final routePath = Path()
+      ..moveTo(_scale(route.first, size).dx, _scale(route.first, size).dy);
     for (final point in route.skip(1)) {
       routePath.lineTo(_scale(point, size).dx, _scale(point, size).dy);
     }
@@ -1017,7 +1053,8 @@ class _RouteMapPainter extends CustomPainter {
     );
 
     if (trail.isNotEmpty) {
-      final path = Path()..moveTo(_scale(trail.first, size).dx, _scale(trail.first, size).dy);
+      final path = Path()
+        ..moveTo(_scale(trail.first, size).dx, _scale(trail.first, size).dy);
       for (final point in trail.skip(1)) {
         path.lineTo(_scale(point, size).dx, _scale(point, size).dy);
       }
@@ -1035,7 +1072,8 @@ class _RouteMapPainter extends CustomPainter {
     final start = _scale(route.first, size);
     final goal = _scale(route.last, size);
     canvas.drawCircle(start, 13, Paint()..color = color);
-    canvas.drawCircle(start, 5, Paint()..color = Colors.white.withValues(alpha: .86));
+    canvas.drawCircle(
+        start, 5, Paint()..color = Colors.white.withValues(alpha: .86));
     canvas.drawCircle(
       goal,
       highlightGoal ? 18 : 14,
@@ -1073,36 +1111,72 @@ class _SpatialConstructionBoard extends StatefulWidget {
   final _ChoiceCallback onChoice;
 
   @override
-  State<_SpatialConstructionBoard> createState() => _SpatialConstructionBoardState();
+  State<_SpatialConstructionBoard> createState() =>
+      _SpatialConstructionBoardState();
 }
 
 class _SpatialConstructionBoardState extends State<_SpatialConstructionBoard> {
   final Map<int, int> _placements = {};
+  Timer? _settleTimer;
   bool _submitting = false;
 
   @override
   void didUpdateWidget(covariant _SpatialConstructionBoard oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.task.id != widget.task.id) {
+      _settleTimer?.cancel();
       _placements.clear();
       _submitting = false;
     }
   }
 
-  Future<void> _place(int piece, int slot) async {
-    if (_submitting || _placements.containsKey(slot) || _placements.containsValue(piece)) return;
-    if (piece != slot) {
-      await _miss();
+  @override
+  void dispose() {
+    _settleTimer?.cancel();
+    super.dispose();
+  }
+
+  void _place(int piece, int slot) {
+    if (_submitting ||
+        _placements.containsKey(slot) ||
+        _placements.containsValue(piece)) {
       return;
     }
     setState(() => _placements[slot] = piece);
-    if (_placements.length == 4) await _complete();
+    if (_placements.length == 4) _scheduleFinalization();
+  }
+
+  void _removePlacement(int slot) {
+    if (_submitting || !_placements.containsKey(slot)) return;
+    _settleTimer?.cancel();
+    setState(() => _placements.remove(slot));
+  }
+
+  bool get _isCompleteConstruction => _placements.length == 4;
+
+  bool get _isCorrectConstruction =>
+      _isCompleteConstruction &&
+      List<int>.generate(4, (slot) => slot)
+          .every((slot) => _placements[slot] == slot);
+
+  void _scheduleFinalization() {
+    _settleTimer?.cancel();
+    _settleTimer = Timer(const Duration(milliseconds: 1500), () {
+      if (!mounted || _submitting || !_isCompleteConstruction) return;
+      if (_isCorrectConstruction) {
+        unawaited(_complete());
+      } else {
+        unawaited(_miss());
+      }
+    });
   }
 
   Future<void> _complete() async {
     if (_submitting) return;
+    _settleTimer?.cancel();
     setState(() => _submitting = true);
-    final solved = await _sendChoice(widget.onChoice, widget.task.correctOption);
+    final solved =
+        await _sendChoice(widget.onChoice, widget.task.correctOption);
     if (!mounted || solved) return;
     setState(() {
       _submitting = false;
@@ -1114,6 +1188,7 @@ class _SpatialConstructionBoardState extends State<_SpatialConstructionBoard> {
     if (_submitting) return;
     final wrong = _wrongOption(widget.task, _visibleOptions(widget.task));
     if (wrong == null) return;
+    _settleTimer?.cancel();
     setState(() => _submitting = true);
     await _sendChoice(widget.onChoice, wrong);
     if (!mounted) return;
@@ -1137,7 +1212,8 @@ class _SpatialConstructionBoardState extends State<_SpatialConstructionBoard> {
                 spacing: 12,
                 runSpacing: 12,
                 children: [
-                  for (var slot = 0; slot < 4; slot++) _buildSlot(slot, palette),
+                  for (var slot = 0; slot < 4; slot++)
+                    _buildSlot(slot, palette),
                 ],
               ),
             ),
@@ -1150,7 +1226,8 @@ class _SpatialConstructionBoardState extends State<_SpatialConstructionBoard> {
           runSpacing: 14,
           children: [
             for (var piece = 0; piece < 4; piece++)
-              if (!_placements.containsValue(piece)) _buildPiece(piece, palette),
+              if (!_placements.containsValue(piece))
+                _buildPiece(piece, palette),
           ],
         ),
       ],
@@ -1165,22 +1242,29 @@ class _SpatialConstructionBoardState extends State<_SpatialConstructionBoard> {
           final placed = _placements[slot];
           final active = candidates.isNotEmpty;
           final color = palette[slot % palette.length];
-          return AnimatedContainer(
-            duration: const Duration(milliseconds: 160),
-            width: 106,
-            height: 106,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              color: color.withValues(alpha: placed == null ? (active ? .24 : .08) : .20),
-              borderRadius: BorderRadius.only(
-                topLeft: Radius.circular(slot.isEven ? 28 : 8),
-                bottomRight: Radius.circular(slot.isEven ? 8 : 28),
+          return GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: placed == null ? null : () => _removePlacement(slot),
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 160),
+              width: 106,
+              height: 106,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: color.withValues(
+                    alpha: placed == null ? (active ? .24 : .08) : .20),
+                borderRadius: BorderRadius.only(
+                  topLeft: Radius.circular(slot.isEven ? 28 : 8),
+                  bottomRight: Radius.circular(slot.isEven ? 8 : 28),
+                ),
+                border: Border.all(
+                    color: color.withValues(alpha: .75), width: active ? 4 : 2),
               ),
-              border: Border.all(color: color.withValues(alpha: .75), width: active ? 4 : 2),
+              child: placed == null
+                  ? Icon(Icons.add_rounded,
+                      color: color.withValues(alpha: .58), size: 32)
+                  : _ConstructionPiece(piece: placed, color: color, size: 62),
             ),
-            child: placed == null
-                ? Icon(Icons.add_rounded, color: color.withValues(alpha: .58), size: 32)
-                : _ConstructionPiece(piece: placed, color: color, size: 62),
           );
         },
       );
@@ -1191,7 +1275,9 @@ class _SpatialConstructionBoardState extends State<_SpatialConstructionBoard> {
     return LongPressDraggable<int>(
       key: ValueKey('construction-piece-$piece'),
       data: piece,
-      feedback: Material(color: Colors.transparent, child: Opacity(opacity: .82, child: child)),
+      feedback: Material(
+          color: Colors.transparent,
+          child: Opacity(opacity: .82, child: child)),
       childWhenDragging: Opacity(opacity: .20, child: child),
       child: child,
     );
@@ -1199,7 +1285,8 @@ class _SpatialConstructionBoardState extends State<_SpatialConstructionBoard> {
 }
 
 class _ConstructionPiece extends StatelessWidget {
-  const _ConstructionPiece({required this.piece, required this.color, required this.size});
+  const _ConstructionPiece(
+      {required this.piece, required this.color, required this.size});
 
   final int piece;
   final Color color;
@@ -1214,9 +1301,11 @@ class _ConstructionPiece extends StatelessWidget {
           color: color.withValues(alpha: .82),
           borderRadius: BorderRadius.only(
             topLeft: Radius.circular(piece.isEven ? size * .43 : size * .10),
-            bottomRight: Radius.circular(piece.isEven ? size * .10 : size * .43),
+            bottomRight:
+                Radius.circular(piece.isEven ? size * .10 : size * .43),
           ),
-          border: Border.all(color: Colors.white.withValues(alpha: .72), width: 2),
+          border:
+              Border.all(color: Colors.white.withValues(alpha: .72), width: 2),
         ),
         child: Icon(
           switch (piece) {
@@ -1254,15 +1343,23 @@ class _SequenceOrderBoard extends StatefulWidget {
 
 class _SequenceOrderBoardState extends State<_SequenceOrderBoard> {
   List<int> _order = [2, 0, 3, 1];
+  Timer? _settleTimer;
   bool _submitting = false;
 
   @override
   void didUpdateWidget(covariant _SequenceOrderBoard oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.task.id != widget.task.id || oldWidget.kind != widget.kind) {
+      _settleTimer?.cancel();
       _order = [2, 0, 3, 1];
       _submitting = false;
     }
+  }
+
+  @override
+  void dispose() {
+    _settleTimer?.cancel();
+    super.dispose();
   }
 
   void _reorder(int oldIndex, int newIndex) {
@@ -1272,7 +1369,19 @@ class _SequenceOrderBoardState extends State<_SequenceOrderBoard> {
       final card = _order.removeAt(oldIndex);
       _order.insert(newIndex, card);
     });
-    if (_isCompleteOrder) _complete();
+    _scheduleFinalization();
+  }
+
+  void _scheduleFinalization() {
+    _settleTimer?.cancel();
+    _settleTimer = Timer(const Duration(milliseconds: 1500), () {
+      if (!mounted || _submitting) return;
+      if (_isCompleteOrder) {
+        unawaited(_complete());
+      } else {
+        unawaited(_miss());
+      }
+    });
   }
 
   bool get _isCompleteOrder {
@@ -1284,9 +1393,25 @@ class _SequenceOrderBoardState extends State<_SequenceOrderBoard> {
 
   Future<void> _complete() async {
     if (_submitting) return;
+    _settleTimer?.cancel();
     setState(() => _submitting = true);
-    final solved = await _sendChoice(widget.onChoice, widget.task.correctOption);
+    final solved =
+        await _sendChoice(widget.onChoice, widget.task.correctOption);
     if (!mounted || solved) return;
+    setState(() {
+      _submitting = false;
+      _order = [2, 0, 3, 1];
+    });
+  }
+
+  Future<void> _miss() async {
+    if (_submitting) return;
+    final wrong = _wrongOption(widget.task, _visibleOptions(widget.task));
+    if (wrong == null) return;
+    _settleTimer?.cancel();
+    setState(() => _submitting = true);
+    final advanced = await _sendChoice(widget.onChoice, wrong);
+    if (!mounted || advanced) return;
     setState(() {
       _submitting = false;
       _order = [2, 0, 3, 1];
@@ -1332,7 +1457,8 @@ class _SequenceOrderBoardState extends State<_SequenceOrderBoard> {
           children: [
             for (var index = 0; index < _order.length; index++)
               Padding(
-                key: ValueKey('sequence-card-${widget.kind.name}-${_order[index]}'),
+                key: ValueKey(
+                    'sequence-card-${widget.kind.name}-${_order[index]}'),
                 padding: const EdgeInsets.symmetric(horizontal: 6),
                 child: ReorderableDelayedDragStartListener(
                   index: index,
@@ -1352,7 +1478,8 @@ class _SequenceOrderBoardState extends State<_SequenceOrderBoard> {
 }
 
 class _SequenceCard extends StatelessWidget {
-  const _SequenceCard({required this.icon, required this.color, required this.position});
+  const _SequenceCard(
+      {required this.icon, required this.color, required this.position});
 
   final IconData icon;
   final Color color;
@@ -1382,7 +1509,9 @@ class _SequenceCard extends StatelessWidget {
                     width: 5,
                     height: 5,
                     margin: const EdgeInsets.symmetric(horizontal: 1.5),
-                    decoration: BoxDecoration(color: color.withValues(alpha: .76), shape: BoxShape.circle),
+                    decoration: BoxDecoration(
+                        color: color.withValues(alpha: .76),
+                        shape: BoxShape.circle),
                   ),
                 ),
               ),
@@ -1449,7 +1578,9 @@ class _CauseAndEffectBoardState extends State<_CauseAndEffectBoard> {
           child: SizedBox(
             height: 142,
             child: TweenAnimationBuilder<double>(
-              duration: widget.task.allowMotion ? const Duration(milliseconds: 900) : Duration.zero,
+              duration: widget.task.allowMotion
+                  ? const Duration(milliseconds: 900)
+                  : Duration.zero,
               tween: Tween(begin: 0.0, end: 1.0),
               builder: (context, progress, child) => Stack(
                 alignment: Alignment.center,
@@ -1457,7 +1588,8 @@ class _CauseAndEffectBoardState extends State<_CauseAndEffectBoard> {
                   Positioned(
                     left: 38 + progress * 102,
                     top: 45 + progress * 26,
-                    child: Icon(Icons.sports_baseball_rounded, color: palette.first, size: 34),
+                    child: Icon(Icons.sports_baseball_rounded,
+                        color: palette.first, size: 34),
                   ),
                   Positioned(
                     right: 36,
@@ -1475,7 +1607,8 @@ class _CauseAndEffectBoardState extends State<_CauseAndEffectBoard> {
                             height: 36 + index * 8.0,
                             margin: const EdgeInsets.symmetric(horizontal: 2),
                             decoration: BoxDecoration(
-                              color: palette[1 % palette.length].withValues(alpha: .74),
+                              color: palette[1 % palette.length]
+                                  .withValues(alpha: .74),
                               borderRadius: BorderRadius.circular(9),
                             ),
                           ),
@@ -1483,7 +1616,8 @@ class _CauseAndEffectBoardState extends State<_CauseAndEffectBoard> {
                       ),
                     ),
                   ),
-                  Icon(Icons.arrow_forward_rounded, color: palette.first.withValues(alpha: .42), size: 36),
+                  Icon(Icons.arrow_forward_rounded,
+                      color: palette.first.withValues(alpha: .42), size: 36),
                 ],
               ),
             ),
@@ -1502,7 +1636,9 @@ class _CauseAndEffectBoardState extends State<_CauseAndEffectBoard> {
                 selected: _selected == index,
                 onTap: _submitting ? null : () => _choose(options, index),
                 child: _EffectOutcome(
-                  kind: index == correct ? _EffectOutcomeKind.fallenCups : _EffectOutcomeKind.values[index % 2 + 1],
+                  kind: index == correct
+                      ? _EffectOutcomeKind.fallenCups
+                      : _EffectOutcomeKind.values[index % 2 + 1],
                   color: palette[index % palette.length],
                 ),
               ),
@@ -1532,14 +1668,18 @@ class _EffectOutcome extends StatelessWidget {
             children: [
               Icon(Icons.sports_baseball_rounded, color: color, size: 31),
               const SizedBox(width: 4),
-              Icon(Icons.block_rounded, color: color.withValues(alpha: .62), size: 24),
+              Icon(Icons.block_rounded,
+                  color: color.withValues(alpha: .62), size: 24),
             ],
           ),
         _EffectOutcomeKind.ballBounces => Stack(
             alignment: Alignment.center,
             children: [
               Icon(Icons.sports_baseball_rounded, color: color, size: 34),
-              Positioned(bottom: 1, child: Icon(Icons.keyboard_double_arrow_up_rounded, color: color, size: 23)),
+              Positioned(
+                  bottom: 1,
+                  child: Icon(Icons.keyboard_double_arrow_up_rounded,
+                      color: color, size: 23)),
             ],
           ),
       };
@@ -1564,8 +1704,10 @@ class _RhythmReplayBoardState extends State<_RhythmReplayBoard> {
   static const List<int> _sequence = [0, 2, 1, 3];
 
   Timer? _demoTimer;
+  Timer? _settleTimer;
   int? _flash;
-  int _entered = 0;
+  final List<int> _entered = <int>[];
+  int? _lastTapped;
   bool _ready = false;
   bool _submitting = false;
 
@@ -1584,12 +1726,15 @@ class _RhythmReplayBoardState extends State<_RhythmReplayBoard> {
   @override
   void dispose() {
     _demoTimer?.cancel();
+    _settleTimer?.cancel();
     super.dispose();
   }
 
   void _showSequence() {
     _demoTimer?.cancel();
-    _entered = 0;
+    _settleTimer?.cancel();
+    _entered.clear();
+    _lastTapped = null;
     _submitting = false;
     if (!widget.task.allowMotion) {
       _flash = null;
@@ -1620,20 +1765,41 @@ class _RhythmReplayBoardState extends State<_RhythmReplayBoard> {
 
   Future<void> _tapPad(int index) async {
     if (!_ready || _submitting) return;
-    if (index != _sequence[_entered]) {
-      final wrong = _wrongOption(widget.task, _visibleOptions(widget.task));
-      if (wrong == null) return;
-      setState(() => _submitting = true);
-      await _sendChoice(widget.onChoice, wrong);
-      if (!mounted) return;
+    _settleTimer?.cancel();
+    setState(() {
+      _lastTapped = index;
+      if (_entered.length >= _sequence.length) {
+        // The last beat can be changed during the settle window without
+        // turning a near-complete response into an immediate failure.
+        _entered[_entered.length - 1] = index;
+      } else {
+        _entered.add(index);
+      }
+    });
+    if (_entered.length < _sequence.length) return;
+
+    _settleTimer = Timer(const Duration(milliseconds: 1500), _submitSequence);
+  }
+
+  Future<void> _submitSequence() async {
+    if (!mounted || _submitting || _entered.length != _sequence.length) {
+      return;
+    }
+    final matchesSequence = List<bool>.generate(
+      _sequence.length,
+      (index) => _entered[index] == _sequence[index],
+    ).every((matches) => matches);
+
+    final choice = matchesSequence
+        ? widget.task.correctOption
+        : _wrongOption(widget.task, _visibleOptions(widget.task));
+    if (choice == null) {
       setState(_showSequence);
       return;
     }
-    setState(() => _entered += 1);
-    if (_entered < _sequence.length) return;
     setState(() => _submitting = true);
-    final solved = await _sendChoice(widget.onChoice, widget.task.correctOption);
-    if (!mounted || solved) return;
+    final advanced = await _sendChoice(widget.onChoice, choice);
+    if (!mounted || advanced) return;
     setState(_showSequence);
   }
 
@@ -1661,7 +1827,8 @@ class _RhythmReplayBoardState extends State<_RhythmReplayBoard> {
                         height: 18 + _sequence[index] * 7.0,
                         margin: const EdgeInsets.symmetric(horizontal: 5),
                         decoration: BoxDecoration(
-                          color: palette[_sequence[index] % palette.length].withValues(alpha: .55),
+                          color: palette[_sequence[index] % palette.length]
+                              .withValues(alpha: .55),
                           borderRadius: BorderRadius.circular(8),
                         ),
                       ),
@@ -1679,7 +1846,7 @@ class _RhythmReplayBoardState extends State<_RhythmReplayBoard> {
                       key: ValueKey('rhythm-pad-$index'),
                       color: palette[index % palette.length],
                       flashing: _flash == index,
-                      pressed: _ready && _entered > 0 && _sequence[_entered - 1] == index,
+                      pressed: _ready && _lastTapped == index,
                       onTap: () => _tapPad(index),
                     ),
                 ],
@@ -1716,14 +1883,27 @@ class _RhythmPad extends StatelessWidget {
           height: 64,
           alignment: Alignment.center,
           decoration: BoxDecoration(
-            color: color.withValues(alpha: flashing ? .92 : pressed ? .64 : .22),
+            color: color.withValues(
+                alpha: flashing
+                    ? .92
+                    : pressed
+                        ? .64
+                        : .22),
             borderRadius: BorderRadius.circular(18),
-            border: Border.all(color: color.withValues(alpha: .88), width: flashing ? 4 : 2),
+            border: Border.all(
+                color: color.withValues(alpha: .88), width: flashing ? 4 : 2),
             boxShadow: flashing
-                ? [BoxShadow(color: color.withValues(alpha: .44), blurRadius: 18, spreadRadius: 3)]
+                ? [
+                    BoxShadow(
+                        color: color.withValues(alpha: .44),
+                        blurRadius: 18,
+                        spreadRadius: 3)
+                  ]
                 : null,
           ),
-          child: Icon(Icons.circle_rounded, color: Colors.white.withValues(alpha: flashing ? .94 : .55), size: 22),
+          child: Icon(Icons.circle_rounded,
+              color: Colors.white.withValues(alpha: flashing ? .94 : .55),
+              size: 22),
         ),
       );
 }

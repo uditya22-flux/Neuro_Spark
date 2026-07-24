@@ -345,9 +345,12 @@ class SyntheticEngine2Result {
   final VisualSceneSpec? scene;
   final PlayMechanic? finalSector;
   final SyntheticEngine2Sandbox? sandbox;
-  /// `false` means the server retained the current task after a soft miss;
-  /// `true` means it accepted a correct selection and may have issued a new
-  /// task. A final inactivity skip is represented separately by [skipped].
+
+  /// `false` means the selected visual option was non-matching. A response
+  /// without [nextTask] is a legacy soft miss; a response with [nextTask]
+  /// is a completed, incorrect observation that advances quietly. `true`
+  /// means it accepted a matching selection. A final inactivity skip is
+  /// represented separately by [skipped].
   /// It is null for a newly started session.
   final bool? solved;
   final bool skipped;
@@ -388,19 +391,22 @@ class SyntheticEngine2Result {
       );
     }
     if (rawStatus != 'in_progress') {
-      return SyntheticEngine2Result.unavailable('Unexpected synthetic Engine 2 response.');
+      return SyntheticEngine2Result.unavailable(
+          'Unexpected synthetic Engine 2 response.');
     }
 
     final sessionId = _opaqueIdOrNull(json['session_id']);
     final currentLayer = _layerOrNull(json['current_layer']);
     final rawTask = json['next_task'];
     if (sessionId == null || currentLayer == null) {
-      return SyntheticEngine2Result.unavailable('Synthetic Engine 2 returned an incomplete task.');
+      return SyntheticEngine2Result.unavailable(
+          'Synthetic Engine 2 returned an incomplete task.');
     }
 
-    // A soft miss deliberately stays on the same word-free surface. The
-    // caller retains its current puzzle while the server has recorded the
-    // aggregate response; there is no new puzzle to parse here.
+    // A `false` response without a next task is a legacy soft miss. A false
+    // response *with* a next task is a finalized incorrect observation and
+    // must be accepted, otherwise Flutter would leave the prior task stuck
+    // on screen even though the server had already advanced it.
     final skipped = json['skipped'] == true;
     if (json['solved'] == false) {
       if (rawTask == null) {
@@ -417,18 +423,14 @@ class SyntheticEngine2Result {
           solved: false,
         );
       }
-      if (!skipped) {
-        return SyntheticEngine2Result.unavailable(
-          'Synthetic Engine 2 returned an invalid soft-miss response.',
-        );
-      }
     } else if (skipped) {
       return SyntheticEngine2Result.unavailable(
         'Synthetic Engine 2 returned an invalid skipped response.',
       );
     }
     if (rawTask is! Map) {
-      return SyntheticEngine2Result.unavailable('Synthetic Engine 2 returned an incomplete task.');
+      return SyntheticEngine2Result.unavailable(
+          'Synthetic Engine 2 returned an incomplete task.');
     }
 
     final taskJson = Map<String, dynamic>.from(rawTask);
@@ -446,7 +448,8 @@ class SyntheticEngine2Result {
           );
     final task = _puzzleFromJson(taskJson, visual, currentLayer);
     if (task == null) {
-      return SyntheticEngine2Result.unavailable('Synthetic Engine 2 returned an invalid task.');
+      return SyntheticEngine2Result.unavailable(
+          'Synthetic Engine 2 returned an invalid task.');
     }
     final activeSectors = _mechanicsFromJson(json['active_sectors']);
     return SyntheticEngine2Result._(
@@ -476,7 +479,11 @@ PuzzleSpec? _puzzleFromJson(
   final sector = _mechanicOrNull(json['sector']);
   final options = _optionsFromJson(json['options']);
   final correctOption = _safeOption(json['correct_option']);
-  if (id == null || sector == null || options.length < 2 || correctOption == null || !options.contains(correctOption)) {
+  if (id == null ||
+      sector == null ||
+      options.length < 2 ||
+      correctOption == null ||
+      !options.contains(correctOption)) {
     return null;
   }
   final requestedItemCount = _bounded(
@@ -494,7 +501,8 @@ PuzzleSpec? _puzzleFromJson(
     options: options,
     correctOption: correctOption,
     itemCount: requestedItemCount,
-    showsDistractors: json['shows_distractors'] == true && visual.allowDistractors,
+    showsDistractors:
+        json['shows_distractors'] == true && visual.allowDistractors,
     visualThemeKey: visual.world.name,
     familiarColors: visual.palette,
     visualStylePreference: visual.objectStyle,
@@ -502,7 +510,8 @@ PuzzleSpec? _puzzleFromJson(
     allowMotion: visual.motionAllowed,
     expectedInteractions: 1,
     speedBudgetMs: 12000,
-    difficulty: _bounded((json['difficulty'] as num?)?.toInt() ?? currentLayer, minimum: 1, maximum: 10),
+    difficulty: _bounded((json['difficulty'] as num?)?.toInt() ?? currentLayer,
+        minimum: 1, maximum: 10),
   );
 }
 
@@ -526,7 +535,9 @@ VisualSceneSpec? _sceneFromJson(
   // neither field contains free text or a user identity.
   if (puzzlePlan is Map && json['puzzle_plan'] == null) {
     final plan = Map<String, dynamic>.from(puzzlePlan);
-    if (sector != null && !plan.containsKey('kind') && !plan.containsKey('sector')) {
+    if (sector != null &&
+        !plan.containsKey('kind') &&
+        !plan.containsKey('sector')) {
       plan['kind'] = sector.name;
     }
     json['puzzle_plan'] = plan;
@@ -545,7 +556,8 @@ T _enumByName<T extends Enum>(List<T> values, Object? raw, T fallback) {
 List<FamiliarColor> _uniquePalette(Iterable<FamiliarColor> colors) {
   final palette = colors.map((color) => color.name).toSet().toList()..sort();
   return palette
-      .map((name) => _enumByName(FamiliarColor.values, name, FamiliarColor.blue))
+      .map(
+          (name) => _enumByName(FamiliarColor.values, name, FamiliarColor.blue))
       .take(3)
       .toList(growable: false);
 }
@@ -555,11 +567,14 @@ List<FamiliarColor> _colorsFromJson(Object? raw) {
   final colors = <FamiliarColor>{};
   for (final value in raw) {
     if (value is! String) continue;
-    final color = FamiliarColor.values.where((candidate) => candidate.name == value);
+    final color =
+        FamiliarColor.values.where((candidate) => candidate.name == value);
     if (color.isNotEmpty) colors.add(color.first);
     if (colors.length == 3) break;
   }
-  return colors.isEmpty ? const [FamiliarColor.blue] : colors.toList(growable: false);
+  return colors.isEmpty
+      ? const [FamiliarColor.blue]
+      : colors.toList(growable: false);
 }
 
 List<PlayMechanic> _mechanicsFromJson(Object? raw) {
@@ -582,7 +597,9 @@ PlayMechanic? _mechanicOrNull(Object? raw) {
 
 SyntheticEngine2Sandbox? _sandboxOrNull(Object? raw) => switch (raw) {
       'calendar' || 'calendar_sandbox' => SyntheticEngine2Sandbox.calendar,
-      'constellation' || 'constellation_sandbox' => SyntheticEngine2Sandbox.constellation,
+      'constellation' ||
+      'constellation_sandbox' =>
+        SyntheticEngine2Sandbox.constellation,
       _ => null,
     };
 
@@ -600,15 +617,19 @@ List<String> _optionsFromJson(Object? raw) {
 String? _safeOption(Object? raw) {
   if (raw is! String) return null;
   final value = raw.trim();
-  if (value.isEmpty || value.length > 40 || !RegExp(r'^[A-Za-z0-9 _-]+$').hasMatch(value)) {
+  if (value.isEmpty ||
+      value.length > 40 ||
+      !RegExp(r'^[A-Za-z0-9 _-]+$').hasMatch(value)) {
     return null;
   }
   return value;
 }
 
-bool _isOpaqueId(String value) => RegExp(r'^[A-Za-z0-9_-]{1,128}$').hasMatch(value);
+bool _isOpaqueId(String value) =>
+    RegExp(r'^[A-Za-z0-9_-]{1,128}$').hasMatch(value);
 
-String? _opaqueIdOrNull(Object? raw) => raw is String && _isOpaqueId(raw) ? raw : null;
+String? _opaqueIdOrNull(Object? raw) =>
+    raw is String && _isOpaqueId(raw) ? raw : null;
 
 int? _layerOrNull(Object? raw) {
   final value = (raw as num?)?.toInt();

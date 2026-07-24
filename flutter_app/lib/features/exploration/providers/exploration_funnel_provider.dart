@@ -15,7 +15,13 @@ import 'intake_provider.dart';
 enum ExplorationPhase { idle, ambientBaseline, deepening, complete }
 
 /// Result of one server-validated visual option in synthetic cloud mode.
-enum SyntheticCloudChoiceResult { solved, skipped, softMiss, unavailable }
+enum SyntheticCloudChoiceResult {
+  solved,
+  advanced,
+  skipped,
+  softMiss,
+  unavailable,
+}
 
 class SupportLadderState {
   final int level;
@@ -312,8 +318,14 @@ class ExplorationFunnelController
 
     _inactivityTimer?.cancel();
     _adoptSyntheticCloudResult(result);
-    return result.isSolved || result.isComplete
-        ? SyntheticCloudChoiceResult.solved
+    if (result.isSolved || result.isComplete) {
+      return SyntheticCloudChoiceResult.solved;
+    }
+    // A selected but non-matching visual answer is still a completed
+    // observation in this exploration flow. The server has recorded it as
+    // incorrect and supplied the next activity; it is not a soft failure.
+    return result.isInProgress && result.hasNextTask
+        ? SyntheticCloudChoiceResult.advanced
         : SyntheticCloudChoiceResult.unavailable;
   }
 

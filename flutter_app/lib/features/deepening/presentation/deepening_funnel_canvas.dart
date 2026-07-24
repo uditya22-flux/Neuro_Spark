@@ -181,15 +181,19 @@ class _DeepeningFunnelCanvasState extends ConsumerState<DeepeningFunnelCanvas> {
                             _tracker!.recordSoftMiss();
                             return false;
                           }
-                          _tracker!.recordCorrectChoice();
+                          if (outcome == SyntheticCloudChoiceResult.solved) {
+                            _tracker!.recordCorrectChoice();
+                          } else {
+                            _tracker!.recordSoftMiss();
+                          }
                           return true;
                         }
-                        if (option != task.correctOption) {
+                        final isCorrect = option == task.correctOption;
+                        if (isCorrect) {
+                          _tracker!.recordCorrectChoice();
+                        } else {
                           _tracker!.recordSoftMiss();
-                          return false;
                         }
-
-                        _tracker!.recordCorrectChoice();
                         controller.completeCurrentTask(_tracker!.finish());
                         return true;
                       },

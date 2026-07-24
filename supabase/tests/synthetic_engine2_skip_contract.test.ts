@@ -91,3 +91,30 @@ Deno.test("synthetic Engine 2 inactivity skip is allowlisted and finalizes false
     "Final skip responses must retain the existing response-driven survivor funnel.",
   );
 });
+
+Deno.test("synthetic Engine 2 finalizes every deliberate visual selection", async () => {
+  const source = await Deno.readTextFile(
+    new URL(
+      "../functions/synthetic-engine2-next-task/index.ts",
+      import.meta.url,
+    ),
+  );
+  const answerTask = sourceBlock(
+    source,
+    "async function answerTask(",
+    "\nasync function skipTask(",
+  );
+
+  assert(
+    answerTask.includes("await recordAttempt(serviceClient, session, task, request.optionId, solved, request.telemetry);"),
+    "Every selection must be recorded before advancing.",
+  );
+  assert(
+    answerTask.includes("{ correct: solved }"),
+    "The final response must preserve whether the chosen option was correct.",
+  );
+  assert(
+    !answerTask.includes("if (!solved) return progressResponse"),
+    "An incorrect selection must not leave the participant on the same task.",
+  );
+});

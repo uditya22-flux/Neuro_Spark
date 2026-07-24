@@ -43,7 +43,8 @@ class NonAudioMechanicBoard extends StatelessWidget {
   };
 
   static bool supports(PuzzleSpec task) =>
-      task.mechanics.length == 1 && _supportedMechanics.contains(task.mechanics.single);
+      task.mechanics.length == 1 &&
+      _supportedMechanics.contains(task.mechanics.single);
 
   @override
   Widget build(BuildContext context) {
@@ -166,7 +167,8 @@ class _TaskChoices {
   }
 
   static List<String> _visibleOptions(PuzzleSpec task) {
-    final source = task.options.isEmpty ? <String>[task.correctOption] : task.options;
+    final source =
+        task.options.isEmpty ? <String>[task.correctOption] : task.options;
     final requested = task.itemCount.clamp(1, source.length).toInt();
     final options = source.take(requested).toList(growable: true);
     if (!options.contains(task.correctOption)) {
@@ -198,7 +200,8 @@ class _PlayPalette {
   final Color tertiary;
 
   factory _PlayPalette.forTask(PuzzleSpec task) {
-    final colors = task.familiarColors.map(_fromFamiliarColor).toList(growable: false);
+    final colors =
+        task.familiarColors.map(_fromFamiliarColor).toList(growable: false);
     if (colors.isEmpty) {
       return const _PlayPalette(
         Color(0xff5270a2),
@@ -290,7 +293,12 @@ class _ChoiceTile extends StatelessWidget {
                   width: highlight ? 3 : 1.4,
                 ),
                 boxShadow: highlight
-                    ? [BoxShadow(color: color.withValues(alpha: .22), blurRadius: 13, spreadRadius: 1)]
+                    ? [
+                        BoxShadow(
+                            color: color.withValues(alpha: .22),
+                            blurRadius: 13,
+                            spreadRadius: 1)
+                      ]
                     : null,
               ),
               child: child,
@@ -365,7 +373,8 @@ class _ShapeToken extends StatelessWidget {
       _TokenShape.square => Container(
           width: size,
           height: size,
-          decoration: BoxDecoration(color: painted, borderRadius: BorderRadius.circular(size * .16)),
+          decoration: BoxDecoration(
+              color: painted, borderRadius: BorderRadius.circular(size * .16)),
         ),
       _TokenShape.triangle => CustomPaint(
           size: Size.square(size),
@@ -391,7 +400,8 @@ class _TrianglePainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant _TrianglePainter oldDelegate) => oldDelegate.color != color;
+  bool shouldRepaint(covariant _TrianglePainter oldDelegate) =>
+      oldDelegate.color != color;
 }
 
 class _NumberPatternBoard extends StatefulWidget {
@@ -410,7 +420,8 @@ class _NumberPatternBoard extends StatefulWidget {
   State<_NumberPatternBoard> createState() => _NumberPatternBoardState();
 }
 
-class _NumberPatternBoardState extends State<_NumberPatternBoard> with _ChoiceSubmitter<_NumberPatternBoard> {
+class _NumberPatternBoardState extends State<_NumberPatternBoard>
+    with _ChoiceSubmitter<_NumberPatternBoard> {
   int? _selected;
 
   Future<void> _choose(_TaskChoices choices, int index) async {
@@ -448,7 +459,8 @@ class _NumberPatternBoardState extends State<_NumberPatternBoard> with _ChoiceSu
                 width: 48,
                 height: 48,
                 decoration: BoxDecoration(
-                  border: Border.all(color: palette.primary.withValues(alpha: .55), width: 2),
+                  border: Border.all(
+                      color: palette.primary.withValues(alpha: .55), width: 2),
                   borderRadius: BorderRadius.circular(14),
                 ),
               ),
@@ -463,7 +475,8 @@ class _NumberPatternBoardState extends State<_NumberPatternBoard> with _ChoiceSu
               choices.length,
               (index) => _ChoiceTile(
                 color: palette.primary,
-                highlight: widget.highlightTarget && index == choices.correctIndex,
+                highlight:
+                    widget.highlightTarget && index == choices.correctIndex,
                 selected: _selected == index,
                 onTap: isSubmitting ? null : () => _choose(choices, index),
                 child: _DotCloud(count: counts[index], color: palette.primary),
@@ -492,7 +505,8 @@ class _RuleDiscoveryBoard extends StatefulWidget {
   State<_RuleDiscoveryBoard> createState() => _RuleDiscoveryBoardState();
 }
 
-class _RuleDiscoveryBoardState extends State<_RuleDiscoveryBoard> with _ChoiceSubmitter<_RuleDiscoveryBoard> {
+class _RuleDiscoveryBoardState extends State<_RuleDiscoveryBoard>
+    with _ChoiceSubmitter<_RuleDiscoveryBoard> {
   bool _placed = false;
 
   Future<void> _drop(_TaskChoices choices, int bin, int correctBin) async {
@@ -509,7 +523,11 @@ class _RuleDiscoveryBoardState extends State<_RuleDiscoveryBoard> with _ChoiceSu
     final binCount = math.max(2, math.min(3, choices.length)).toInt();
     final correctBin = choices.correctIndex % binCount;
     final binColors = [palette.primary, palette.secondary, palette.tertiary];
-    const binShapes = [_TokenShape.circle, _TokenShape.square, _TokenShape.triangle];
+    const binShapes = [
+      _TokenShape.circle,
+      _TokenShape.square,
+      _TokenShape.triangle
+    ];
     return _BoardFrame(
       color: palette.secondary,
       highlightTarget: widget.highlightTarget,
@@ -526,7 +544,9 @@ class _RuleDiscoveryBoardState extends State<_RuleDiscoveryBoard> with _ChoiceSu
                     color: binColors[index],
                     shape: binShapes[index],
                     highlighted: widget.highlightTarget && index == correctBin,
-                    onAccept: isSubmitting || _placed ? null : () => _drop(choices, index, correctBin),
+                    onAccept: isSubmitting || _placed
+                        ? null
+                        : () => _drop(choices, index, correctBin),
                   ),
                 ),
               ),
@@ -537,7 +557,10 @@ class _RuleDiscoveryBoardState extends State<_RuleDiscoveryBoard> with _ChoiceSu
             data: correctBin,
             feedback: Material(
               color: Colors.transparent,
-              child: _ShapeToken(color: binColors[correctBin], shape: binShapes[correctBin], size: 54),
+              child: _ShapeToken(
+                  color: binColors[correctBin],
+                  shape: binShapes[correctBin],
+                  size: 54),
             ),
             childWhenDragging: _ShapeToken(
               color: binColors[correctBin],
@@ -580,7 +603,8 @@ class _RuleBin extends StatelessWidget {
           height: 106,
           decoration: BoxDecoration(
             color: color.withValues(alpha: candidates.isNotEmpty ? .22 : .1),
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(24), bottom: Radius.circular(12)),
+            borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(24), bottom: Radius.circular(12)),
             border: Border.all(
               color: color.withValues(alpha: highlighted ? .94 : .42),
               width: highlighted ? 3 : 1.5,
@@ -612,12 +636,23 @@ class _MultiAttributeSortingBoard extends StatefulWidget {
   final _ChoiceCallback onChoice;
 
   @override
-  State<_MultiAttributeSortingBoard> createState() => _MultiAttributeSortingBoardState();
+  State<_MultiAttributeSortingBoard> createState() =>
+      _MultiAttributeSortingBoardState();
 }
 
-class _MultiAttributeSortingBoardState extends State<_MultiAttributeSortingBoard>
+class _MultiAttributeSortingBoardState
+    extends State<_MultiAttributeSortingBoard>
     with _ChoiceSubmitter<_MultiAttributeSortingBoard> {
-  final Set<int> _placed = <int>{};
+  static const _settleDuration = Duration(milliseconds: 1500);
+
+  final Map<int, int> _placements = <int, int>{};
+  Timer? _settleTimer;
+
+  @override
+  void dispose() {
+    _settleTimer?.cancel();
+    super.dispose();
+  }
 
   Future<void> _drop({
     required _TaskChoices choices,
@@ -625,18 +660,31 @@ class _MultiAttributeSortingBoardState extends State<_MultiAttributeSortingBoard
     required int bin,
     required List<int> targets,
   }) async {
-    if (isSubmitting || _placed.contains(item)) return;
+    if (isSubmitting) return;
     if (widget.task.preferHaptics) HapticFeedback.selectionClick();
-    if (targets[item] != bin) {
-      await submitChoice(widget.onChoice, choices.incorrectAt(bin));
+    _settleTimer?.cancel();
+    setState(() => _placements[item] = bin);
+    if (_placements.length != targets.length) {
       return;
     }
+    _settleTimer = Timer(_settleDuration, () {
+      _submitFinalSort(choices, targets);
+    });
+  }
 
-    setState(() => _placed.add(item));
-    if (_placed.length != targets.length) return;
-
-    final solved = await submitChoice(widget.onChoice, choices.correct);
-    if (mounted && !solved) setState(_placed.clear);
+  Future<void> _submitFinalSort(_TaskChoices choices, List<int> targets) async {
+    if (!mounted || isSubmitting || _placements.length != targets.length) {
+      return;
+    }
+    final incorrectItem =
+        List<int>.generate(targets.length, (index) => index).firstWhere(
+      (item) => _placements[item] != targets[item],
+      orElse: () => -1,
+    );
+    final choice = incorrectItem < 0
+        ? choices.correct
+        : choices.incorrectAt(_placements[incorrectItem]!);
+    await submitChoice(widget.onChoice, choice);
   }
 
   @override
@@ -644,8 +692,13 @@ class _MultiAttributeSortingBoardState extends State<_MultiAttributeSortingBoard
     final palette = _PlayPalette.forTask(widget.task);
     final choices = _TaskChoices(widget.task);
     final colors = [palette.primary, palette.secondary, palette.tertiary];
-    const shapes = [_TokenShape.circle, _TokenShape.square, _TokenShape.triangle];
-    final itemTotal = math.max(3, math.min(5, 3 + widget.task.difficulty ~/ 3)).toInt();
+    const shapes = [
+      _TokenShape.circle,
+      _TokenShape.square,
+      _TokenShape.triangle
+    ];
+    final itemTotal =
+        math.max(3, math.min(5, 3 + widget.task.difficulty ~/ 3)).toInt();
     final targets = List<int>.generate(itemTotal, (index) => index % 3);
     return _BoardFrame(
       color: palette.tertiary,
@@ -664,7 +717,7 @@ class _MultiAttributeSortingBoardState extends State<_MultiAttributeSortingBoard
                     shape: shapes[bin],
                     highlight: widget.highlightTarget && bin == 0,
                     contents: List<int>.generate(itemTotal, (index) => index)
-                        .where((item) => _placed.contains(item) && targets[item] == bin)
+                        .where((item) => _placements[item] == bin)
                         .map(
                           (item) => _ShapeToken(
                             color: colors[targets[item]],
@@ -699,7 +752,8 @@ class _MultiAttributeSortingBoardState extends State<_MultiAttributeSortingBoard
                   data: item,
                   feedback: Material(
                     color: Colors.transparent,
-                    child: _ShapeToken(color: colors[target], shape: shapes[target], size: 46),
+                    child: _ShapeToken(
+                        color: colors[target], shape: shapes[target], size: 46),
                   ),
                   childWhenDragging: _ShapeToken(
                     color: colors[target],
@@ -711,7 +765,7 @@ class _MultiAttributeSortingBoardState extends State<_MultiAttributeSortingBoard
                     color: colors[target],
                     shape: shapes[target],
                     size: 46,
-                    faded: _placed.contains(item),
+                    faded: _placements.containsKey(item),
                   ),
                 );
               },
@@ -748,7 +802,8 @@ class _SortingBin extends StatelessWidget {
           padding: const EdgeInsets.all(8),
           decoration: BoxDecoration(
             color: color.withValues(alpha: candidates.isNotEmpty ? .23 : .09),
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(24), bottom: Radius.circular(12)),
+            borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(24), bottom: Radius.circular(12)),
             border: Border.all(
               color: color.withValues(alpha: highlight ? .94 : .4),
               width: highlight ? 3 : 1.5,
@@ -758,7 +813,11 @@ class _SortingBin extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               _ShapeToken(color: color, shape: shape, size: 28),
-              Wrap(alignment: WrapAlignment.center, spacing: 4, runSpacing: 4, children: contents),
+              Wrap(
+                  alignment: WrapAlignment.center,
+                  spacing: 4,
+                  runSpacing: 4,
+                  children: contents),
             ],
           ),
         ),
@@ -781,7 +840,8 @@ class _SystemizingBoard extends StatefulWidget {
   State<_SystemizingBoard> createState() => _SystemizingBoardState();
 }
 
-class _SystemizingBoardState extends State<_SystemizingBoard> with _ChoiceSubmitter<_SystemizingBoard> {
+class _SystemizingBoardState extends State<_SystemizingBoard>
+    with _ChoiceSubmitter<_SystemizingBoard> {
   int? _selected;
 
   Future<void> _choose(_TaskChoices choices, int index) async {
@@ -796,7 +856,11 @@ class _SystemizingBoardState extends State<_SystemizingBoard> with _ChoiceSubmit
   Widget build(BuildContext context) {
     final palette = _PlayPalette.forTask(widget.task);
     final choices = _TaskChoices(widget.task);
-    const shared = [Icons.directions_car_rounded, Icons.directions_bus_rounded, Icons.two_wheeler_rounded];
+    const shared = [
+      Icons.directions_car_rounded,
+      Icons.directions_bus_rounded,
+      Icons.two_wheeler_rounded
+    ];
     const distractors = [
       Icons.pets_rounded,
       Icons.local_florist_rounded,
@@ -821,7 +885,8 @@ class _SystemizingBoardState extends State<_SystemizingBoard> with _ChoiceSubmit
               alignment: WrapAlignment.center,
               spacing: 16,
               children: [
-                for (final icon in shared) Icon(icon, size: 43, color: palette.primary),
+                for (final icon in shared)
+                  Icon(icon, size: 43, color: palette.primary),
               ],
             ),
           ),
@@ -835,11 +900,16 @@ class _SystemizingBoardState extends State<_SystemizingBoard> with _ChoiceSubmit
               (index) => _ChoiceTile(
                 color: palette.primary,
                 selected: _selected == index,
-                highlight: widget.highlightTarget && index == choices.correctIndex,
+                highlight:
+                    widget.highlightTarget && index == choices.correctIndex,
                 onTap: isSubmitting ? null : () => _choose(choices, index),
                 child: Icon(
-                  index == choices.correctIndex ? belonging : distractors[index % distractors.length],
-                  color: index == choices.correctIndex ? palette.primary : palette.secondary,
+                  index == choices.correctIndex
+                      ? belonging
+                      : distractors[index % distractors.length],
+                  color: index == choices.correctIndex
+                      ? palette.primary
+                      : palette.secondary,
                   size: 50,
                 ),
               ),
@@ -864,10 +934,12 @@ class _QuantitativeEstimationBoard extends StatefulWidget {
   final _ChoiceCallback onChoice;
 
   @override
-  State<_QuantitativeEstimationBoard> createState() => _QuantitativeEstimationBoardState();
+  State<_QuantitativeEstimationBoard> createState() =>
+      _QuantitativeEstimationBoardState();
 }
 
-class _QuantitativeEstimationBoardState extends State<_QuantitativeEstimationBoard>
+class _QuantitativeEstimationBoardState
+    extends State<_QuantitativeEstimationBoard>
     with _ChoiceSubmitter<_QuantitativeEstimationBoard> {
   Timer? _flashTimer;
   bool _flash = true;
@@ -922,8 +994,12 @@ class _QuantitativeEstimationBoardState extends State<_QuantitativeEstimationBoa
                   color: palette.tertiary,
                   size: const Size(118, 106),
                   selected: _selected == index,
-                  highlight: !_flash && widget.highlightTarget && index == choices.correctIndex,
-                  onTap: _flash || isSubmitting ? null : () => _choose(choices, index),
+                  highlight: !_flash &&
+                      widget.highlightTarget &&
+                      index == choices.correctIndex,
+                  onTap: _flash || isSubmitting
+                      ? null
+                      : () => _choose(choices, index),
                   child: _DotCloud(
                     count: counts[index],
                     color: index.isEven ? palette.primary : palette.secondary,
@@ -937,7 +1013,8 @@ class _QuantitativeEstimationBoardState extends State<_QuantitativeEstimationBoa
           AnimatedOpacity(
             duration: const Duration(milliseconds: 160),
             opacity: _flash ? .65 : 0,
-            child: Icon(Icons.visibility_rounded, color: palette.tertiary.withValues(alpha: .85), size: 26),
+            child: Icon(Icons.visibility_rounded,
+                color: palette.tertiary.withValues(alpha: .85), size: 26),
           ),
         ],
       ),
@@ -958,7 +1035,8 @@ class _PictureAssociationBoard extends StatefulWidget {
   final _ChoiceCallback onChoice;
 
   @override
-  State<_PictureAssociationBoard> createState() => _PictureAssociationBoardState();
+  State<_PictureAssociationBoard> createState() =>
+      _PictureAssociationBoardState();
 }
 
 class _PictureAssociationBoardState extends State<_PictureAssociationBoard>
@@ -977,7 +1055,12 @@ class _PictureAssociationBoardState extends State<_PictureAssociationBoard>
   Widget build(BuildContext context) {
     final palette = _PlayPalette.forTask(widget.task);
     final choices = _TaskChoices(widget.task);
-    const distractors = [Icons.pets_rounded, Icons.directions_car_rounded, Icons.park_rounded, Icons.cloud_rounded];
+    const distractors = [
+      Icons.pets_rounded,
+      Icons.directions_car_rounded,
+      Icons.park_rounded,
+      Icons.cloud_rounded
+    ];
     return _BoardFrame(
       color: palette.secondary,
       highlightTarget: widget.highlightTarget,
@@ -995,12 +1078,17 @@ class _PictureAssociationBoardState extends State<_PictureAssociationBoard>
               (index) => _ChoiceTile(
                 color: palette.secondary,
                 selected: _selected == index,
-                highlight: widget.highlightTarget && index == choices.correctIndex,
+                highlight:
+                    widget.highlightTarget && index == choices.correctIndex,
                 onTap: isSubmitting ? null : () => _choose(choices, index),
                 child: Icon(
-                  index == choices.correctIndex ? Icons.palette_rounded : distractors[index % distractors.length],
+                  index == choices.correctIndex
+                      ? Icons.palette_rounded
+                      : distractors[index % distractors.length],
                   size: 52,
-                  color: index == choices.correctIndex ? palette.secondary : palette.primary,
+                  color: index == choices.correctIndex
+                      ? palette.secondary
+                      : palette.primary,
                 ),
               ),
             ),
@@ -1043,7 +1131,8 @@ class _WordlessInferenceBoard extends StatefulWidget {
   final _ChoiceCallback onChoice;
 
   @override
-  State<_WordlessInferenceBoard> createState() => _WordlessInferenceBoardState();
+  State<_WordlessInferenceBoard> createState() =>
+      _WordlessInferenceBoardState();
 }
 
 class _WordlessInferenceBoardState extends State<_WordlessInferenceBoard>
@@ -1062,7 +1151,12 @@ class _WordlessInferenceBoardState extends State<_WordlessInferenceBoard>
   Widget build(BuildContext context) {
     final palette = _PlayPalette.forTask(widget.task);
     final choices = _TaskChoices(widget.task);
-    const distractors = [Icons.icecream_rounded, Icons.directions_run_rounded, Icons.celebration_rounded, Icons.pets_rounded];
+    const distractors = [
+      Icons.icecream_rounded,
+      Icons.directions_run_rounded,
+      Icons.celebration_rounded,
+      Icons.pets_rounded
+    ];
     return _BoardFrame(
       color: palette.primary,
       highlightTarget: widget.highlightTarget,
@@ -1073,10 +1167,13 @@ class _WordlessInferenceBoardState extends State<_WordlessInferenceBoard>
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               _StoryPanel(icon: Icons.cloud_rounded, color: palette.primary),
-              Icon(Icons.arrow_forward_rounded, color: palette.primary.withValues(alpha: .6)),
+              Icon(Icons.arrow_forward_rounded,
+                  color: palette.primary.withValues(alpha: .6)),
               _StoryPanel(icon: Icons.person_rounded, color: palette.secondary),
-              Icon(Icons.arrow_forward_rounded, color: palette.primary.withValues(alpha: .6)),
-              _StoryPanel(icon: Icons.help_outline_rounded, color: palette.tertiary),
+              Icon(Icons.arrow_forward_rounded,
+                  color: palette.primary.withValues(alpha: .6)),
+              _StoryPanel(
+                  icon: Icons.help_outline_rounded, color: palette.tertiary),
             ],
           ),
           const SizedBox(height: 22),
@@ -1089,12 +1186,17 @@ class _WordlessInferenceBoardState extends State<_WordlessInferenceBoard>
               (index) => _ChoiceTile(
                 color: palette.primary,
                 selected: _selected == index,
-                highlight: widget.highlightTarget && index == choices.correctIndex,
+                highlight:
+                    widget.highlightTarget && index == choices.correctIndex,
                 onTap: isSubmitting ? null : () => _choose(choices, index),
                 child: Icon(
-                  index == choices.correctIndex ? Icons.umbrella_rounded : distractors[index % distractors.length],
+                  index == choices.correctIndex
+                      ? Icons.umbrella_rounded
+                      : distractors[index % distractors.length],
                   size: 50,
-                  color: index == choices.correctIndex ? palette.primary : palette.secondary,
+                  color: index == choices.correctIndex
+                      ? palette.primary
+                      : palette.secondary,
                 ),
               ),
             ),
@@ -1141,7 +1243,8 @@ class _AnalogyMappingBoard extends StatefulWidget {
   State<_AnalogyMappingBoard> createState() => _AnalogyMappingBoardState();
 }
 
-class _AnalogyMappingBoardState extends State<_AnalogyMappingBoard> with _ChoiceSubmitter<_AnalogyMappingBoard> {
+class _AnalogyMappingBoardState extends State<_AnalogyMappingBoard>
+    with _ChoiceSubmitter<_AnalogyMappingBoard> {
   int? _selected;
 
   Future<void> _choose(_TaskChoices choices, int index) async {
@@ -1156,7 +1259,12 @@ class _AnalogyMappingBoardState extends State<_AnalogyMappingBoard> with _Choice
   Widget build(BuildContext context) {
     final palette = _PlayPalette.forTask(widget.task);
     final choices = _TaskChoices(widget.task);
-    const distractors = [Icons.cloud_rounded, Icons.pets_rounded, Icons.home_rounded, Icons.directions_car_rounded];
+    const distractors = [
+      Icons.cloud_rounded,
+      Icons.pets_rounded,
+      Icons.home_rounded,
+      Icons.directions_car_rounded
+    ];
     return _BoardFrame(
       color: palette.tertiary,
       highlightTarget: widget.highlightTarget,
@@ -1184,11 +1292,16 @@ class _AnalogyMappingBoardState extends State<_AnalogyMappingBoard> with _Choice
               (index) => _ChoiceTile(
                 color: palette.tertiary,
                 selected: _selected == index,
-                highlight: widget.highlightTarget && index == choices.correctIndex,
+                highlight:
+                    widget.highlightTarget && index == choices.correctIndex,
                 onTap: isSubmitting ? null : () => _choose(choices, index),
                 child: Icon(
-                  index == choices.correctIndex ? Icons.local_florist_rounded : distractors[index % distractors.length],
-                  color: index == choices.correctIndex ? palette.secondary : palette.primary,
+                  index == choices.correctIndex
+                      ? Icons.local_florist_rounded
+                      : distractors[index % distractors.length],
+                  color: index == choices.correctIndex
+                      ? palette.secondary
+                      : palette.primary,
                   size: 50,
                 ),
               ),
@@ -1201,7 +1314,8 @@ class _AnalogyMappingBoardState extends State<_AnalogyMappingBoard> with _Choice
 }
 
 class _AnalogyStrip extends StatelessWidget {
-  const _AnalogyStrip({required this.left, required this.right, required this.color});
+  const _AnalogyStrip(
+      {required this.left, required this.right, required this.color});
 
   final IconData left;
   final IconData right;
@@ -1214,7 +1328,8 @@ class _AnalogyStrip extends StatelessWidget {
           _StoryPanel(icon: left, color: color),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 12),
-            child: Icon(Icons.arrow_forward_rounded, color: color.withValues(alpha: .62)),
+            child: Icon(Icons.arrow_forward_rounded,
+                color: color.withValues(alpha: .62)),
           ),
           _StoryPanel(icon: right, color: color),
         ],
@@ -1234,26 +1349,48 @@ class _CreativeStorytellingBoard extends StatefulWidget {
   final _ChoiceCallback onChoice;
 
   @override
-  State<_CreativeStorytellingBoard> createState() => _CreativeStorytellingBoardState();
+  State<_CreativeStorytellingBoard> createState() =>
+      _CreativeStorytellingBoardState();
 }
 
 class _CreativeStorytellingBoardState extends State<_CreativeStorytellingBoard>
     with _ChoiceSubmitter<_CreativeStorytellingBoard> {
+  static const _settleDuration = Duration(milliseconds: 1500);
+
   final List<int?> _slots = <int?>[null, null, null];
+  Timer? _settleTimer;
 
   bool get _canFinish => _slots.whereType<int>().length == _slots.length;
 
+  @override
+  void dispose() {
+    _settleTimer?.cancel();
+    super.dispose();
+  }
+
   void _place(int item, int slot) {
     if (isSubmitting) return;
+    _settleTimer?.cancel();
     setState(() {
       final oldSlot = _slots.indexOf(item);
-      if (oldSlot >= 0) _slots[oldSlot] = null;
+      final replaced = _slots[slot];
+      if (oldSlot >= 0 && oldSlot != slot) _slots[oldSlot] = replaced;
       _slots[slot] = item;
+    });
+    if (_canFinish) _queueFinish();
+  }
+
+  void _queueFinish() {
+    if (!_canFinish || isSubmitting) return;
+    _settleTimer?.cancel();
+    _settleTimer = Timer(_settleDuration, () {
+      _finish();
     });
   }
 
   Future<void> _finish() async {
     if (!_canFinish || isSubmitting) return;
+    _settleTimer?.cancel();
     if (widget.task.preferHaptics) HapticFeedback.selectionClick();
     await submitChoice(widget.onChoice, _TaskChoices(widget.task).correct);
   }
@@ -1302,7 +1439,10 @@ class _CreativeStorytellingBoardState extends State<_CreativeStorytellingBoard>
                 data: item,
                 feedback: Material(
                   color: Colors.transparent,
-                  child: _StoryToken(icon: storyIcons[item], color: palette.secondary, size: 48),
+                  child: _StoryToken(
+                      icon: storyIcons[item],
+                      color: palette.secondary,
+                      size: 48),
                 ),
                 childWhenDragging: _StoryToken(
                   icon: storyIcons[item],
@@ -1324,19 +1464,22 @@ class _CreativeStorytellingBoardState extends State<_CreativeStorytellingBoard>
             button: true,
             label: 'Continue picture story',
             child: GestureDetector(
-              onTap: _canFinish && !isSubmitting ? _finish : null,
+              onTap: _canFinish && !isSubmitting ? _queueFinish : null,
               child: AnimatedContainer(
                 duration: const Duration(milliseconds: 180),
                 width: 58,
                 height: 48,
                 alignment: Alignment.center,
                 decoration: BoxDecoration(
-                  color: palette.secondary.withValues(alpha: _canFinish ? .92 : .18),
+                  color: palette.secondary
+                      .withValues(alpha: _canFinish ? .92 : .18),
                   borderRadius: BorderRadius.circular(18),
                 ),
                 child: Icon(
                   Icons.auto_awesome_rounded,
-                  color: _canFinish ? Colors.white : palette.secondary.withValues(alpha: .5),
+                  color: _canFinish
+                      ? Colors.white
+                      : palette.secondary.withValues(alpha: .5),
                 ),
               ),
             ),
@@ -1379,14 +1522,17 @@ class _StoryDropSlot extends StatelessWidget {
             ),
           ),
           child: item == null
-              ? Icon(Icons.more_horiz_rounded, color: color.withValues(alpha: .42), size: 30)
+              ? Icon(Icons.more_horiz_rounded,
+                  color: color.withValues(alpha: .42), size: 30)
               : Draggable<int>(
                   data: item!,
                   feedback: Material(
                     color: Colors.transparent,
-                    child: _StoryToken(icon: iconForItem(item!), color: color, size: 45),
+                    child: _StoryToken(
+                        icon: iconForItem(item!), color: color, size: 45),
                   ),
-                  child: _StoryToken(icon: iconForItem(item!), color: color, size: 45),
+                  child: _StoryToken(
+                      icon: iconForItem(item!), color: color, size: 45),
                 ),
         ),
       );
@@ -1437,8 +1583,12 @@ class _WorkingMemoryBoard extends StatefulWidget {
   State<_WorkingMemoryBoard> createState() => _WorkingMemoryBoardState();
 }
 
-class _WorkingMemoryBoardState extends State<_WorkingMemoryBoard> with _ChoiceSubmitter<_WorkingMemoryBoard> {
+class _WorkingMemoryBoardState extends State<_WorkingMemoryBoard>
+    with _ChoiceSubmitter<_WorkingMemoryBoard> {
+  static const _settleDuration = Duration(milliseconds: 1500);
+
   Timer? _previewTimer;
+  Timer? _settleTimer;
   int _previewIndex = 0;
   bool _previewing = true;
   final List<int> _entered = <int>[];
@@ -1458,11 +1608,13 @@ class _WorkingMemoryBoardState extends State<_WorkingMemoryBoard> with _ChoiceSu
   @override
   void dispose() {
     _previewTimer?.cancel();
+    _settleTimer?.cancel();
     super.dispose();
   }
 
   void _startPreview() {
     _previewTimer?.cancel();
+    _settleTimer?.cancel();
     setState(() {
       _previewing = true;
       _previewIndex = 0;
@@ -1485,17 +1637,38 @@ class _WorkingMemoryBoardState extends State<_WorkingMemoryBoard> with _ChoiceSu
 
   Future<void> _tapCell(_TaskChoices choices, int cell) async {
     if (_previewing || isSubmitting) return;
-    final expected = _sequence[_entered.length];
-    if (cell != expected) {
-      if (widget.task.preferHaptics) HapticFeedback.selectionClick();
-      final solved = await submitChoice(widget.onChoice, choices.incorrectAt(cell));
-      if (mounted && !solved) setState(_entered.clear);
+    if (widget.task.preferHaptics) HapticFeedback.selectionClick();
+    _settleTimer?.cancel();
+    if (_entered.length >= _sequence.length) {
+      // The final cell can be revised during the short settle window; replay
+      // remains available for a full new attempt.
+      setState(() => _entered[_entered.length - 1] = cell);
+      _queueFinalization(choices);
       return;
     }
     setState(() => _entered.add(cell));
     if (_entered.length != _sequence.length) return;
-    if (widget.task.preferHaptics) HapticFeedback.selectionClick();
-    final solved = await submitChoice(widget.onChoice, choices.correct);
+    _queueFinalization(choices);
+  }
+
+  void _queueFinalization(_TaskChoices choices) {
+    _settleTimer?.cancel();
+    _settleTimer = Timer(_settleDuration, () {
+      _submitFinalSequence(choices);
+    });
+  }
+
+  Future<void> _submitFinalSequence(_TaskChoices choices) async {
+    if (!mounted || isSubmitting || _entered.length != _sequence.length) {
+      return;
+    }
+    final matchesSequence = List<bool>.generate(
+      _sequence.length,
+      (index) => _entered[index] == _sequence[index],
+    ).every((matches) => matches);
+    final choice =
+        matchesSequence ? choices.correct : choices.incorrectAt(_entered.last);
+    final solved = await submitChoice(widget.onChoice, choice);
     if (mounted && !solved) setState(_entered.clear);
   }
 
@@ -1503,7 +1676,9 @@ class _WorkingMemoryBoardState extends State<_WorkingMemoryBoard> with _ChoiceSu
   Widget build(BuildContext context) {
     final palette = _PlayPalette.forTask(widget.task);
     final choices = _TaskChoices(widget.task);
-    final hintedCell = !_previewing && widget.highlightTarget && _entered.length < _sequence.length
+    final hintedCell = !_previewing &&
+            widget.highlightTarget &&
+            _entered.length < _sequence.length
         ? _sequence[_entered.length]
         : -1;
     return _BoardFrame(
@@ -1540,7 +1715,8 @@ class _WorkingMemoryBoardState extends State<_WorkingMemoryBoard> with _ChoiceSu
               label: 'Replay lights',
               child: GestureDetector(
                 onTap: isSubmitting ? null : _startPreview,
-                child: Icon(Icons.visibility_rounded, color: palette.primary.withValues(alpha: .76), size: 31),
+                child: Icon(Icons.visibility_rounded,
+                    color: palette.primary.withValues(alpha: .76), size: 31),
               ),
             ),
           ],
@@ -1574,13 +1750,22 @@ class _MemoryCell extends StatelessWidget {
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 160),
             decoration: BoxDecoration(
-              color: lit ? color : selected ? color.withValues(alpha: .44) : Colors.white.withValues(alpha: .68),
+              color: lit
+                  ? color
+                  : selected
+                      ? color.withValues(alpha: .44)
+                      : Colors.white.withValues(alpha: .68),
               borderRadius: BorderRadius.circular(14),
               border: Border.all(
                 color: color.withValues(alpha: highlighted ? .96 : .28),
                 width: highlighted ? 3 : 1.3,
               ),
-              boxShadow: lit ? [BoxShadow(color: color.withValues(alpha: .48), blurRadius: 13)] : null,
+              boxShadow: lit
+                  ? [
+                      BoxShadow(
+                          color: color.withValues(alpha: .48), blurRadius: 13)
+                    ]
+                  : null,
             ),
           ),
         ),
@@ -1600,7 +1785,8 @@ class _VisualSceneMemoryBoard extends StatefulWidget {
   final _ChoiceCallback onChoice;
 
   @override
-  State<_VisualSceneMemoryBoard> createState() => _VisualSceneMemoryBoardState();
+  State<_VisualSceneMemoryBoard> createState() =>
+      _VisualSceneMemoryBoardState();
 }
 
 class _VisualSceneMemoryBoardState extends State<_VisualSceneMemoryBoard>
@@ -1635,11 +1821,13 @@ class _VisualSceneMemoryBoardState extends State<_VisualSceneMemoryBoard>
     );
   }
 
-  Future<void> _tapObject(_TaskChoices choices, int object, int changedObject) async {
+  Future<void> _tapObject(
+      _TaskChoices choices, int object, int changedObject) async {
     if (_remembering || isSubmitting) return;
     if (widget.task.preferHaptics) HapticFeedback.selectionClick();
     setState(() => _selected = object);
-    final choice = object == changedObject ? choices.correct : choices.incorrectAt(object);
+    final choice =
+        object == changedObject ? choices.correct : choices.incorrectAt(object);
     final solved = await submitChoice(widget.onChoice, choice);
     if (mounted && !solved) setState(() => _selected = null);
   }
@@ -1648,7 +1836,8 @@ class _VisualSceneMemoryBoardState extends State<_VisualSceneMemoryBoard>
   Widget build(BuildContext context) {
     final palette = _PlayPalette.forTask(widget.task);
     final choices = _TaskChoices(widget.task);
-    final changedObject = (choices.correctIndex * 3 + widget.task.difficulty) % 4;
+    final changedObject =
+        (choices.correctIndex * 3 + widget.task.difficulty) % 4;
     return _BoardFrame(
       color: palette.secondary,
       highlightTarget: widget.highlightTarget,
@@ -1662,7 +1851,9 @@ class _VisualSceneMemoryBoardState extends State<_VisualSceneMemoryBoard>
             color: palette.secondary,
             accent: palette.tertiary,
             highlightChanged: !_remembering && widget.highlightTarget,
-            onObject: isSubmitting ? null : (object) => _tapObject(choices, object, changedObject),
+            onObject: isSubmitting
+                ? null
+                : (object) => _tapObject(choices, object, changedObject),
           ),
           if (widget.task.visualRepetitionHelpful) ...[
             const SizedBox(height: 12),
@@ -1671,7 +1862,8 @@ class _VisualSceneMemoryBoardState extends State<_VisualSceneMemoryBoard>
               label: 'View picture again',
               child: GestureDetector(
                 onTap: isSubmitting ? null : _showRememberingScene,
-                child: Icon(Icons.replay_rounded, color: palette.secondary.withValues(alpha: .76), size: 30),
+                child: Icon(Icons.replay_rounded,
+                    color: palette.secondary.withValues(alpha: .76), size: 30),
               ),
             ),
           ],
@@ -1738,7 +1930,8 @@ class _MemoryScene extends StatelessWidget {
                   height: 68,
                   alignment: Alignment.center,
                   decoration: BoxDecoration(
-                    color: (changed ? accent : color).withValues(alpha: selected == index ? .23 : .08),
+                    color: (changed ? accent : color)
+                        .withValues(alpha: selected == index ? .23 : .08),
                     borderRadius: BorderRadius.circular(16),
                     border: Border.all(
                       color: (changed ? accent : color).withValues(
@@ -1771,7 +1964,8 @@ class _SustainedAttentionBoard extends StatefulWidget {
   final _ChoiceCallback onChoice;
 
   @override
-  State<_SustainedAttentionBoard> createState() => _SustainedAttentionBoardState();
+  State<_SustainedAttentionBoard> createState() =>
+      _SustainedAttentionBoardState();
 }
 
 class _SustainedAttentionBoardState extends State<_SustainedAttentionBoard>
@@ -1808,7 +2002,9 @@ class _SustainedAttentionBoardState extends State<_SustainedAttentionBoard>
     if (widget.task.preferHaptics) HapticFeedback.selectionClick();
     final solved = await submitChoice(
       widget.onChoice,
-      _streamIndex == _targetAt ? choices.correct : choices.incorrectAt(_streamIndex),
+      _streamIndex == _targetAt
+          ? choices.correct
+          : choices.incorrectAt(_streamIndex),
     );
     if (!mounted || solved) return;
   }
@@ -1825,7 +2021,9 @@ class _SustainedAttentionBoardState extends State<_SustainedAttentionBoard>
       Icons.favorite_rounded,
     ];
     final isTarget = _streamIndex == _targetAt;
-    final icon = isTarget ? Icons.star_rounded : distractors[_streamIndex % distractors.length];
+    final icon = isTarget
+        ? Icons.star_rounded
+        : distractors[_streamIndex % distractors.length];
     return _BoardFrame(
       color: palette.tertiary,
       highlightTarget: widget.highlightTarget,
@@ -1863,13 +2061,19 @@ class _SustainedAttentionBoardState extends State<_SustainedAttentionBoard>
                     width: isTarget && widget.highlightTarget ? 3 : 1.4,
                   ),
                   boxShadow: isTarget && widget.highlightTarget
-                      ? [BoxShadow(color: palette.tertiary.withValues(alpha: .25), blurRadius: 15)]
+                      ? [
+                          BoxShadow(
+                              color: palette.tertiary.withValues(alpha: .25),
+                              blurRadius: 15)
+                        ]
                       : null,
                 ),
                 child: AnimatedScale(
                   duration: const Duration(milliseconds: 220),
                   scale: isTarget ? 1.12 : .86 + (_streamIndex % 2) * .1,
-                  child: Icon(icon, color: isTarget ? palette.tertiary : palette.primary, size: 68),
+                  child: Icon(icon,
+                      color: isTarget ? palette.tertiary : palette.primary,
+                      size: 68),
                 ),
               ),
             ),
@@ -1893,7 +2097,8 @@ class _SelectiveAttentionBoard extends StatefulWidget {
   final _ChoiceCallback onChoice;
 
   @override
-  State<_SelectiveAttentionBoard> createState() => _SelectiveAttentionBoardState();
+  State<_SelectiveAttentionBoard> createState() =>
+      _SelectiveAttentionBoardState();
 }
 
 class _SelectiveAttentionBoardState extends State<_SelectiveAttentionBoard>
@@ -1915,7 +2120,8 @@ class _SelectiveAttentionBoardState extends State<_SelectiveAttentionBoard>
   Widget build(BuildContext context) {
     final palette = _PlayPalette.forTask(widget.task);
     final choices = _TaskChoices(widget.task);
-    final targetCell = (choices.correctIndex * 5 + widget.task.difficulty + 3) % 16;
+    final targetCell =
+        (choices.correctIndex * 5 + widget.task.difficulty + 3) % 16;
     return _BoardFrame(
       color: palette.primary,
       highlightTarget: widget.highlightTarget,
@@ -1936,26 +2142,35 @@ class _SelectiveAttentionBoardState extends State<_SelectiveAttentionBoard>
                 16,
                 (cell) {
                   final target = cell == targetCell;
-                  final color = cell.isEven ? palette.primary : palette.secondary;
+                  final color =
+                      cell.isEven ? palette.primary : palette.secondary;
                   return Semantics(
                     button: true,
                     child: GestureDetector(
-                      onTap: isSubmitting ? null : () => _tapCell(choices, cell, targetCell),
+                      onTap: isSubmitting
+                          ? null
+                          : () => _tapCell(choices, cell, targetCell),
                       child: AnimatedContainer(
                         duration: const Duration(milliseconds: 150),
                         decoration: BoxDecoration(
-                          color: color.withValues(alpha: _selected == cell ? .23 : .07),
+                          color: color.withValues(
+                              alpha: _selected == cell ? .23 : .07),
                           borderRadius: BorderRadius.circular(12),
                           border: Border.all(
                             color: color.withValues(
-                              alpha: target && widget.highlightTarget ? .98 : .12,
+                              alpha:
+                                  target && widget.highlightTarget ? .98 : .12,
                             ),
                             width: target && widget.highlightTarget ? 3 : 1,
                           ),
                         ),
                         child: Icon(
-                          target ? Icons.star_rounded : Icons.star_border_rounded,
-                          color: target ? palette.primary : color.withValues(alpha: .74),
+                          target
+                              ? Icons.star_rounded
+                              : Icons.star_border_rounded,
+                          color: target
+                              ? palette.primary
+                              : color.withValues(alpha: .74),
                           size: 33,
                         ),
                       ),
