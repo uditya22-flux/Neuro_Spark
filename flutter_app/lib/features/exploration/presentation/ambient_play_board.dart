@@ -138,6 +138,8 @@ class _AmbientPlayBoardState extends State<AmbientPlayBoard> {
                 selected: _selectedIndex == index,
                 animation: animation,
                 interaction: task.interactionPreference,
+                rule: plan?.rule,
+                choiceIndex: index,
                 onTap: () => _choose(options, index),
               ),
           ],
@@ -162,11 +164,10 @@ class _AmbientPlayBoardState extends State<AmbientPlayBoard> {
   }) {
     if (task.mechanics.length != 1) return null;
     final mechanic = task.mechanics.single;
-    final source = scene?.puzzlePlan ??
-        VisualPuzzlePlan(
-          kind: visualPuzzleKindForMechanic(mechanic),
-          variant: mechanic.index % 8,
-        );
+    // Builder/offline sessions deliberately use a local, bounded plan rather
+    // than falling back to one generic colour choice. Every Layer 1 mechanic
+    // therefore retains its own rule, visual trace, and interaction grammar.
+    final source = scene?.puzzlePlan ?? VisualPuzzlePlan.localForMechanic(mechanic);
     return source.resolveFor(
       sector: mechanic,
       optionCount: optionCount,
@@ -257,6 +258,11 @@ class _VisualStage extends StatelessWidget {
 
   Widget _stage() {
     final accent = motif.color;
+    final kind = plan?.kind ?? visualPuzzleKindFromWire(sceneType) ?? VisualPuzzleKind.match;
+    final values = plan?.stimulus.isNotEmpty == true
+        ? plan!.stimulus
+        : List<int>.generate(3, (index) => ((plan?.variant ?? 0) + index + 1) % 16);
+    final rule = plan?.rule;
     final baseStage = switch (sceneType) {
       'sequence' => _SequenceStage(target: target, accent: accent),
       'route' || 'connect' => _RouteStage(target: target, accent: accent),
@@ -274,22 +280,28 @@ class _VisualStage extends StatelessWidget {
       'switch' => _SwitchStage(target: target, accent: accent),
       _ => Center(child: target),
     };
-    final kind = plan?.kind ?? visualPuzzleKindFromWire(sceneType) ?? VisualPuzzleKind.match;
-    final values = plan?.stimulus.isNotEmpty == true
-        ? plan!.stimulus
-        : List<int>.generate(3, (index) => ((plan?.variant ?? 0) + index + 1) % 16);
+    final stage = rule != null && _RuleVisualStage.supports(rule)
+        ? _RuleVisualStage(
+            rule: rule,
+            motif: motif,
+            values: values,
+            target: target,
+          )
+        : baseStage;
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        _StageStimulusTrace(
-          kind: kind,
-          values: values,
-          palette: motif.palette,
-          accent: accent,
-          rule: plan?.rule,
-        ),
-        const SizedBox(height: 12),
-        baseStage,
+        if (rule == null || !_RuleVisualStage.supports(rule)) ...[
+          _StageStimulusTrace(
+            kind: kind,
+            values: values,
+            palette: motif.palette,
+            accent: accent,
+            rule: rule,
+          ),
+          const SizedBox(height: 12),
+        ],
+        stage,
       ],
     );
   }
@@ -316,6 +328,646 @@ class _VisualStage extends StatelessWidget {
       _ => Center(child: stage),
     };
   }
+}
+
+/// A fixed visual grammar for the complete 30-sector Layer 1 array. These
+/// scenes remain entirely picture-based: they never expose a label, timer,
+/// rank, or interpretation to the player. The themed motif is a skin only;
+/// the layout is what makes a route, rhythm, sequence, matrix, memory grid,
+/// or composition activity visibly different.
+class _RuleVisualStage extends StatelessWidget {
+  const _RuleVisualStage({
+    required this.rule,
+    required this.motif,
+    required this.values,
+    required this.target,
+  });
+
+  final VisualPuzzleRule rule;
+  final _VisualMotif motif;
+  final List<int> values;
+  final Widget target;
+
+  static bool supports(VisualPuzzleRule rule) => switch (rule) {
+        VisualPuzzleRule.matchMentalRotation ||
+        VisualPuzzleRule.completeVisualPattern ||
+        VisualPuzzleRule.detectPointCloudAnomaly ||
+        VisualPuzzleRule.navigateMapRoute ||
+        VisualPuzzleRule.reconstructSpatialTarget ||
+        VisualPuzzleRule.orderPictureCycle ||
+        VisualPuzzleRule.orderStoryPanels ||
+        VisualPuzzleRule.chooseEffect ||
+        VisualPuzzleRule.repeatRhythm ||
+        VisualPuzzleRule.orderProcedureIcons ||
+        VisualPuzzleRule.completeQuantityPattern ||
+        VisualPuzzleRule.discoverVisualRule ||
+        VisualPuzzleRule.sortMultipleAttributes ||
+        VisualPuzzleRule.findSharedProperty ||
+        VisualPuzzleRule.chooseLargerDotCloud ||
+        VisualPuzzleRule.matchPictureAssociation ||
+        VisualPuzzleRule.matchPhonologicalPattern ||
+        VisualPuzzleRule.chooseStoryNext ||
+        VisualPuzzleRule.completePictureAnalogy ||
+        VisualPuzzleRule.arrangeStoryPanels ||
+        VisualPuzzleRule.replayCellSequence ||
+        VisualPuzzleRule.findSceneChange ||
+        VisualPuzzleRule.identifyTargetStream ||
+        VisualPuzzleRule.replayToneSequence ||
+        VisualPuzzleRule.findSelectiveTarget ||
+        VisualPuzzleRule.matchEmotionIcon ||
+        VisualPuzzleRule.choosePerspectiveOutcome ||
+        VisualPuzzleRule.chooseTurnStrategy ||
+        VisualPuzzleRule.matchMelodyPattern ||
+        VisualPuzzleRule.completeVisualComposition => true,
+        _ => false,
+      };
+
+  List<int> get _values => values.isEmpty ? const [2, 5, 8, 11] : values;
+  List<Color> get _palette => motif.palette.isEmpty ? const [Color(0xff5270a2)] : motif.palette;
+  Color _color(int index, {double alpha = 1}) =>
+      _palette[_values[index % _values.length] % _palette.length].withValues(alpha: alpha);
+
+  @override
+  Widget build(BuildContext context) => KeyedSubtree(
+        key: ValueKey('visual-rule-${rule.name}'),
+        child: SizedBox(
+          height: 172,
+          child: Center(child: _content()),
+        ),
+      );
+
+  Widget _content() {
+    switch (rule) {
+      // Spatial / visual ----------------------------------------------------
+      case VisualPuzzleRule.matchMentalRotation:
+        return Stack(
+          alignment: Alignment.center,
+          children: [
+            Container(
+              width: 142,
+              height: 142,
+              decoration: BoxDecoration(shape: BoxShape.circle, border: Border.all(color: _color(0, alpha: .45), width: 2)),
+            ),
+            Transform.rotate(
+              angle: .78,
+              child: Icon(Icons.change_history_rounded, color: _color(1, alpha: .52), size: 88),
+            ),
+            const Positioned(top: 8, child: Icon(Icons.rotate_right_rounded, size: 25)),
+            _slot(),
+          ],
+        );
+      case VisualPuzzleRule.completeVisualPattern:
+        return _matrix(
+          columns: 3,
+          cells: List<Widget>.generate(
+            9,
+            (index) => index == 7
+                ? _slot(size: 43)
+                : _tile(index, rounded: index.isEven),
+          ),
+        );
+      case VisualPuzzleRule.detectPointCloudAnomaly:
+        return Stack(
+          alignment: Alignment.center,
+          children: [
+            SizedBox(
+              width: 206,
+              child: Wrap(
+                alignment: WrapAlignment.center,
+                spacing: 13,
+                runSpacing: 12,
+                children: List<Widget>.generate(
+                  18,
+                  (index) => Icon(
+                    index == 11 ? Icons.circle_outlined : Icons.circle,
+                    color: _color(index, alpha: index == 11 ? .96 : .46),
+                    size: index == 11 ? 22 : 12,
+                  ),
+                ),
+              ),
+            ),
+            _slot(size: 48),
+          ],
+        );
+      case VisualPuzzleRule.navigateMapRoute:
+        return _routeMap();
+      case VisualPuzzleRule.reconstructSpatialTarget:
+        return _matrix(
+          columns: 2,
+          cells: [
+            _puzzlePiece(0),
+            _puzzlePiece(1),
+            _puzzlePiece(2),
+            _slot(size: 54),
+          ],
+        );
+
+      // Temporal / sequential ---------------------------------------------
+      case VisualPuzzleRule.orderPictureCycle:
+        return _timeline([
+          _panel(Icons.eco_rounded, 0),
+          _panel(Icons.local_florist_rounded, 1),
+          _slot(size: 52),
+        ]);
+      case VisualPuzzleRule.orderStoryPanels:
+        return _timeline([
+          _panel(Icons.directions_walk_rounded, 0),
+          _panel(motif.icon, 1),
+          _slot(size: 52),
+        ]);
+      case VisualPuzzleRule.chooseEffect:
+        return Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _panel(Icons.play_arrow_rounded, 0),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              child: Icon(Icons.arrow_forward_rounded, color: _color(1), size: 34),
+            ),
+            _slot(size: 60),
+          ],
+        );
+      case VisualPuzzleRule.repeatRhythm:
+        return Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _bars(5, outlinedAt: 3),
+            const SizedBox(height: 16),
+            _slot(size: 54),
+          ],
+        );
+      case VisualPuzzleRule.orderProcedureIcons:
+        return _timeline([
+          _panel(Icons.water_drop_rounded, 0),
+          _panel(Icons.brush_rounded, 1),
+          _slot(size: 52),
+        ]);
+
+      // Numeric / logical --------------------------------------------------
+      case VisualPuzzleRule.completeQuantityPattern:
+        return _timeline([
+          _dotGroup(1, 0),
+          _dotGroup(2, 1),
+          _dotGroup(3, 2),
+          _slot(size: 52),
+        ]);
+      case VisualPuzzleRule.discoverVisualRule:
+        return Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _pair(0, shape: BoxShape.circle),
+            const SizedBox(width: 14),
+            _pair(1, shape: BoxShape.rectangle),
+            const SizedBox(width: 14),
+            _slot(size: 52),
+          ],
+        );
+      case VisualPuzzleRule.sortMultipleAttributes:
+        return Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _bin(0, BoxShape.circle),
+            const SizedBox(width: 12),
+            _slot(size: 54),
+            const SizedBox(width: 12),
+            _bin(1, BoxShape.rectangle),
+          ],
+        );
+      case VisualPuzzleRule.findSharedProperty:
+        return Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _sharedCluster(0),
+            const SizedBox(width: 16),
+            _sharedCluster(1),
+            const SizedBox(width: 16),
+            _slot(size: 52),
+          ],
+        );
+      case VisualPuzzleRule.chooseLargerDotCloud:
+        return Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _dotGroup(3, 0),
+            const SizedBox(width: 24),
+            _dotGroup(6, 1),
+            const SizedBox(width: 16),
+            _slot(size: 46),
+          ],
+        );
+
+      // Wordless language / meaning proxies -------------------------------
+      case VisualPuzzleRule.matchPictureAssociation:
+        return _linkedPanels(Icons.home_rounded, Icons.key_rounded);
+      case VisualPuzzleRule.matchPhonologicalPattern:
+        return Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _panel(Icons.volume_up_rounded, 0),
+            const SizedBox(width: 10),
+            _bars(3),
+            const SizedBox(width: 12),
+            _slot(size: 54),
+          ],
+        );
+      case VisualPuzzleRule.chooseStoryNext:
+        return _timeline([
+          _panel(Icons.wb_sunny_rounded, 0),
+          _panel(motif.icon, 1),
+          _slot(size: 58),
+        ]);
+      case VisualPuzzleRule.completePictureAnalogy:
+        return Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _panel(Icons.pets_rounded, 0),
+            Icon(Icons.arrow_forward_rounded, color: _color(0), size: 26),
+            _panel(Icons.home_rounded, 1),
+            const SizedBox(width: 10),
+            _panel(Icons.bug_report_rounded, 2),
+            Icon(Icons.arrow_forward_rounded, color: _color(1), size: 26),
+            _slot(size: 48),
+          ],
+        );
+      case VisualPuzzleRule.arrangeStoryPanels:
+        return _timeline([
+          _panel(Icons.flag_rounded, 0),
+          _slot(size: 52),
+          _panel(Icons.celebration_rounded, 2),
+        ]);
+
+      // Memory / attention -------------------------------------------------
+      case VisualPuzzleRule.replayCellSequence:
+        return _matrix(
+          columns: 3,
+          cells: List<Widget>.generate(
+            9,
+            (index) => _tile(index, highlighted: const {0, 4, 7}.contains(index), rounded: true),
+          )..[8] = _slot(size: 38),
+        );
+      case VisualPuzzleRule.findSceneChange:
+        return Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _scenePanel(0, changed: false),
+            const SizedBox(width: 14),
+            _scenePanel(1, changed: true),
+            const SizedBox(width: 12),
+            _slot(size: 48),
+          ],
+        );
+      case VisualPuzzleRule.identifyTargetStream:
+        return Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _movingStream(targetAt: 4),
+            const SizedBox(height: 14),
+            _slot(size: 50),
+          ],
+        );
+      case VisualPuzzleRule.replayToneSequence:
+        return Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.volume_up_rounded, color: _color(0), size: 28),
+            const SizedBox(height: 8),
+            _bars(4),
+            const SizedBox(height: 12),
+            _slot(size: 46),
+          ],
+        );
+      case VisualPuzzleRule.findSelectiveTarget:
+        return Stack(
+          alignment: Alignment.center,
+          children: [
+            SizedBox(
+              width: 190,
+              child: Wrap(
+                alignment: WrapAlignment.center,
+                spacing: 12,
+                runSpacing: 10,
+                children: List<Widget>.generate(
+                  15,
+                  (index) => Icon(
+                    index == 9 ? Icons.star_rounded : Icons.change_history_rounded,
+                    color: _color(index, alpha: index == 9 ? .95 : .34),
+                    size: index == 9 ? 24 : 16,
+                  ),
+                ),
+              ),
+            ),
+            _slot(size: 42),
+          ],
+        );
+
+      // Social-emotional / creative play ----------------------------------
+      case VisualPuzzleRule.matchEmotionIcon:
+        return Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _panel(Icons.sentiment_satisfied_alt_rounded, 0),
+            const SizedBox(width: 14),
+            _slot(size: 58),
+            const SizedBox(width: 14),
+            _panel(Icons.sentiment_neutral_rounded, 1),
+          ],
+        );
+      case VisualPuzzleRule.choosePerspectiveOutcome:
+        return Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.visibility_rounded, color: _color(0), size: 44),
+            const SizedBox(width: 10),
+            Icon(Icons.arrow_forward_rounded, color: _color(1), size: 28),
+            const SizedBox(width: 12),
+            _panel(motif.icon, 2),
+            const SizedBox(width: 12),
+            _slot(size: 50),
+          ],
+        );
+      case VisualPuzzleRule.chooseTurnStrategy:
+        return Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: List<Widget>.generate(
+                5,
+                (index) => Container(
+                  width: 25,
+                  height: 25,
+                  margin: const EdgeInsets.symmetric(horizontal: 4),
+                  decoration: BoxDecoration(color: _color(index, alpha: index.isEven ? .82 : .38), shape: BoxShape.circle),
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            _slot(size: 50),
+          ],
+        );
+      case VisualPuzzleRule.matchMelodyPattern:
+        return Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: List<Widget>.generate(
+                5,
+                (index) => Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                  child: Icon(Icons.music_note_rounded, color: _color(index), size: 18 + (index % 3) * 8),
+                ),
+              ),
+            ),
+            const SizedBox(height: 13),
+            _slot(size: 50),
+          ],
+        );
+      case VisualPuzzleRule.completeVisualComposition:
+        return _matrix(
+          columns: 3,
+          cells: List<Widget>.generate(
+            9,
+            (index) => index == 4
+                ? _slot(size: 40)
+                : _tile(index, rounded: index % 3 == 1, highlighted: index.isEven),
+          ),
+        );
+
+      default:
+        return _slot();
+    }
+  }
+
+  Widget _slot({double size = 56}) => Container(
+        width: size,
+        height: size,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: motif.color.withValues(alpha: .08),
+          borderRadius: BorderRadius.circular(size * .24),
+          border: Border.all(color: motif.color.withValues(alpha: .58), width: 2),
+        ),
+        child: FittedBox(child: target),
+      );
+
+  Widget _tile(int index, {bool rounded = false, bool highlighted = false}) => Container(
+        width: 37,
+        height: 37,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: _color(index, alpha: highlighted ? .78 : .25),
+          borderRadius: BorderRadius.circular(rounded ? 18 : 5),
+          border: Border.all(color: _color(index, alpha: .7)),
+        ),
+        child: index % 3 == 0 ? Icon(motif.icon, color: _color(index), size: 17) : null,
+      );
+
+  Widget _matrix({required int columns, required List<Widget> cells}) => SizedBox(
+        width: columns * 51.0,
+        child: Wrap(
+          alignment: WrapAlignment.center,
+          spacing: 12,
+          runSpacing: 12,
+          children: cells,
+        ),
+      );
+
+  Widget _puzzlePiece(int index) => Container(
+        width: 56,
+        height: 56,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: _color(index, alpha: .32),
+          borderRadius: BorderRadius.only(
+            topLeft: Radius.circular(index.isEven ? 26 : 8),
+            bottomRight: Radius.circular(index.isEven ? 8 : 26),
+          ),
+          border: Border.all(color: _color(index), width: 2),
+        ),
+        child: Icon(motif.icon, color: _color(index), size: 26),
+      );
+
+  Widget _timeline(List<Widget> children) => Row(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          for (var index = 0; index < children.length; index++) ...[
+            children[index],
+            if (index < children.length - 1)
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 5),
+                child: Icon(Icons.arrow_forward_rounded, color: _color(index, alpha: .58), size: 22),
+              ),
+          ],
+        ],
+      );
+
+  Widget _panel(IconData icon, int index) => Container(
+        width: 52,
+        height: 52,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: _color(index, alpha: .17),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: _color(index, alpha: .62)),
+        ),
+        child: Icon(icon, color: _color(index), size: 29),
+      );
+
+  Widget _bars(int count, {int? outlinedAt}) => Row(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: List<Widget>.generate(
+          count,
+          (index) => Container(
+            width: 13,
+            height: 18 + ((_values[index % _values.length] + index) % 4) * 10.0,
+            margin: const EdgeInsets.symmetric(horizontal: 4),
+            decoration: BoxDecoration(
+              color: outlinedAt == index ? Colors.transparent : _color(index, alpha: .78),
+              border: Border.all(color: _color(index)),
+              borderRadius: BorderRadius.circular(7),
+            ),
+          ),
+        ),
+      );
+
+  Widget _dotGroup(int count, int index) => SizedBox(
+        width: 58,
+        height: 58,
+        child: Wrap(
+          alignment: WrapAlignment.center,
+          spacing: 5,
+          runSpacing: 5,
+          children: List<Widget>.generate(
+            count,
+            (dot) => Container(
+              width: 9,
+              height: 9,
+              decoration: BoxDecoration(color: _color(index + dot, alpha: .8), shape: BoxShape.circle),
+            ),
+          ),
+        ),
+      );
+
+  Widget _pair(int index, {required BoxShape shape}) => Row(
+        mainAxisSize: MainAxisSize.min,
+        children: List<Widget>.generate(
+          2,
+          (offset) => Container(
+            width: 26,
+            height: 26,
+            margin: const EdgeInsets.symmetric(horizontal: 3),
+            decoration: BoxDecoration(color: _color(index + offset, alpha: .7), shape: shape),
+          ),
+        ),
+      );
+
+  Widget _bin(int index, BoxShape shape) => Container(
+        width: 54,
+        height: 68,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: _color(index, alpha: .12),
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+          border: Border.all(color: _color(index, alpha: .62), width: 2),
+        ),
+        child: Container(width: 18, height: 18, decoration: BoxDecoration(color: _color(index), shape: shape)),
+      );
+
+  Widget _sharedCluster(int index) => SizedBox(
+        width: 58,
+        height: 58,
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            for (final offset in const [Offset(-15, -8), Offset(15, -8), Offset(0, 15)])
+              Transform.translate(
+                offset: offset,
+                child: Icon(motif.icon, color: _color(index, alpha: .76), size: 24),
+              ),
+          ],
+        ),
+      );
+
+  Widget _linkedPanels(IconData left, IconData right) => Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _panel(left, 0),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8),
+            child: Icon(Icons.link_rounded, color: _color(1), size: 25),
+          ),
+          _panel(right, 1),
+          const SizedBox(width: 14),
+          _slot(size: 52),
+        ],
+      );
+
+  Widget _scenePanel(int index, {required bool changed}) => Container(
+        width: 70,
+        height: 68,
+        decoration: BoxDecoration(
+          color: _color(index, alpha: .10),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: _color(index, alpha: .48)),
+        ),
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            Icon(motif.icon, color: _color(index, alpha: .74), size: 34),
+            if (changed) const Positioned(right: 8, top: 7, child: Icon(Icons.star_rounded, size: 16)),
+          ],
+        ),
+      );
+
+  Widget _movingStream({required int targetAt}) => Row(
+        mainAxisSize: MainAxisSize.min,
+        children: List<Widget>.generate(
+          7,
+          (index) => Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4),
+            child: Icon(
+              index == targetAt ? Icons.star_rounded : Icons.circle,
+              color: _color(index, alpha: index == targetAt ? .95 : .32),
+              size: index == targetAt ? 25 : 14,
+            ),
+          ),
+        ),
+      );
+
+  Widget _routeMap() => SizedBox(
+        width: 214,
+        height: 134,
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            Positioned(left: 16, bottom: 22, child: Icon(motif.icon, color: _color(0), size: 32)),
+            Positioned(right: 16, top: 19, child: Icon(Icons.flag_rounded, color: _color(2), size: 30)),
+            Container(
+              width: 164,
+              height: 91,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: _color(1, alpha: .48), width: 3),
+              ),
+            ),
+            Positioned(
+              left: 47,
+              bottom: 36,
+              child: Container(width: 84, height: 4, color: _color(0, alpha: .64)),
+            ),
+            Positioned(
+              right: 44,
+              top: 34,
+              child: Container(width: 4, height: 49, color: _color(1, alpha: .64)),
+            ),
+            _slot(size: 46),
+          ],
+        ),
+      );
 }
 
 /// The server-issued numeric stimulus appears here as a fixed visual trace.
@@ -1508,6 +2160,8 @@ class _GroundedPictureChoice extends StatelessWidget {
     required this.selected,
     required this.animation,
     required this.interaction,
+    required this.rule,
+    required this.choiceIndex,
     required this.onTap,
   });
 
@@ -1516,12 +2170,54 @@ class _GroundedPictureChoice extends StatelessWidget {
   final bool selected;
   final String animation;
   final InteractionPreference interaction;
+  final VisualPuzzleRule? rule;
+  final int choiceIndex;
   final VoidCallback onTap;
 
+  bool get _isPanelChoice => switch (rule) {
+        VisualPuzzleRule.orderPictureCycle ||
+        VisualPuzzleRule.orderStoryPanels ||
+        VisualPuzzleRule.chooseEffect ||
+        VisualPuzzleRule.orderProcedureIcons ||
+        VisualPuzzleRule.chooseStoryNext ||
+        VisualPuzzleRule.completePictureAnalogy ||
+        VisualPuzzleRule.arrangeStoryPanels ||
+        VisualPuzzleRule.findSceneChange ||
+        VisualPuzzleRule.matchEmotionIcon ||
+        VisualPuzzleRule.choosePerspectiveOutcome => true,
+        _ => false,
+      };
+
+  bool get _isRoundChoice => switch (rule) {
+        VisualPuzzleRule.matchMentalRotation ||
+        VisualPuzzleRule.detectPointCloudAnomaly ||
+        VisualPuzzleRule.chooseLargerDotCloud ||
+        VisualPuzzleRule.matchPhonologicalPattern ||
+        VisualPuzzleRule.replayToneSequence ||
+        VisualPuzzleRule.matchMelodyPattern => true,
+        _ => false,
+      };
+
+  bool get _isBinChoice => switch (rule) {
+        VisualPuzzleRule.sortMultipleAttributes ||
+        VisualPuzzleRule.discoverVisualRule ||
+        VisualPuzzleRule.findSharedProperty => true,
+        _ => false,
+      };
+
   @override
-  Widget build(BuildContext context) => Semantics(
+  Widget build(BuildContext context) {
+    final width = _isPanelChoice ? 124.0 : _isRoundChoice ? 96.0 : _isBinChoice ? 102.0 : 108.0;
+    final height = _isPanelChoice ? 92.0 : _isRoundChoice ? 96.0 : _isBinChoice ? 108.0 : 116.0;
+    final radius = _isRoundChoice
+        ? BorderRadius.circular(56)
+        : _isBinChoice
+            ? const BorderRadius.vertical(top: Radius.circular(26), bottom: Radius.circular(12))
+            : BorderRadius.circular(_isPanelChoice ? 12 : 22);
+    return Semantics(
         button: true,
         child: GestureDetector(
+          key: ValueKey('visual-choice-${rule?.name ?? 'generic'}-$choiceIndex'),
           onTap: onTap,
           onHorizontalDragEnd: interaction == InteractionPreference.swiping ? (_) => onTap() : null,
           onPanEnd: interaction == InteractionPreference.dragging ? (_) => onTap() : null,
@@ -1535,14 +2231,14 @@ class _GroundedPictureChoice extends StatelessWidget {
                 duration: const Duration(milliseconds: 280),
                 offset: selected && animation == 'slide' ? const Offset(.35, 0) : Offset.zero,
                 child: Container(
-            width: 108,
-            height: 116,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: .72),
-              borderRadius: BorderRadius.circular(22),
-              border: Border.all(color: color.withValues(alpha: .22)),
-            ),
+                  width: width,
+                  height: height,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: .72),
+                    borderRadius: radius,
+                    border: Border.all(color: color.withValues(alpha: .22)),
+                  ),
                   child: token,
                 ),
               ),
@@ -1550,4 +2246,5 @@ class _GroundedPictureChoice extends StatelessWidget {
           ),
         ),
       );
+  }
 }

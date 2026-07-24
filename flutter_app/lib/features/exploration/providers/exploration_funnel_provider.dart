@@ -92,7 +92,8 @@ class ExplorationFunnelState {
         sessionObservations: sessionObservations ?? this.sessionObservations,
         activeMechanics: activeMechanics ?? this.activeMechanics,
         routingResults: routingResults ?? this.routingResults,
-        finalMechanic: clearFinalMechanic ? null : (finalMechanic ?? this.finalMechanic),
+        finalMechanic:
+            clearFinalMechanic ? null : (finalMechanic ?? this.finalMechanic),
         currentLayer: currentLayer ?? this.currentLayer,
         syntheticCloudSessionId: clearSyntheticCloudSession
             ? null
@@ -106,29 +107,13 @@ class ExplorationFunnelState {
       );
 }
 
-class ExplorationFunnelController extends StateNotifier<ExplorationFunnelState> {
+class ExplorationFunnelController
+    extends StateNotifier<ExplorationFunnelState> {
   ExplorationFunnelController(this.ref) : super(const ExplorationFunnelState());
 
   final Ref ref;
   Timer? _inactivityTimer;
   IntakeConfiguration? get _intake => ref.read(intakeProvider).configuration;
-
-  /// The requested builder-only filtration schedule. Layer 1 is all thirty
-  /// mechanics; every later number is the active pool for that layer.
-  static const Map<int, int> _activeCountByLayer = {
-    1: 30,
-    2: 10,
-    3: 8,
-    4: 7,
-    5: 6,
-    6: 5,
-    7: 4,
-    8: 3,
-    9: 2,
-    10: 1,
-  };
-
-  static int activeDomainCountForLayer(int layer) => _activeCountByLayer[layer] ?? 1;
 
   Future<void> start() async {
     _inactivityTimer?.cancel();
@@ -146,9 +131,10 @@ class ExplorationFunnelController extends StateNotifier<ExplorationFunnelState> 
         currentLayer: 1,
         usesSyntheticCloud: true,
       );
-      final result = await ref.read(syntheticEngine2ServiceProvider).startSession(
-            intake: intake,
-          );
+      final result =
+          await ref.read(syntheticEngine2ServiceProvider).startSession(
+                intake: intake,
+              );
       _adoptSyntheticCloudResult(result);
       return;
     }
@@ -156,7 +142,8 @@ class ExplorationFunnelController extends StateNotifier<ExplorationFunnelState> 
     if (builderShowcaseMode) {
       final tasks = Layer1Generator.generateBuilderShowcase(intake: intake);
       if (tasks.isEmpty) {
-        state = state.copyWith(error: 'Preparing play took longer than expected.');
+        state =
+            state.copyWith(error: 'Preparing play took longer than expected.');
         return;
       }
       state = ExplorationFunnelState(
@@ -194,7 +181,10 @@ class ExplorationFunnelController extends StateNotifier<ExplorationFunnelState> 
 
   void _watchInactivity() {
     _inactivityTimer?.cancel();
-    if (state.phase != ExplorationPhase.deepening || state.currentTask == null) return;
+    if (state.phase != ExplorationPhase.deepening ||
+        state.currentTask == null) {
+      return;
+    }
     _inactivityTimer = Timer(const Duration(seconds: 6), _offerSupport);
   }
 
@@ -220,7 +210,8 @@ class ExplorationFunnelController extends StateNotifier<ExplorationFunnelState> 
     // not enough and there is still no interaction, simplify the same scene
     // shortly afterwards while its active timer stays paused.
     if (!simplify) {
-      _inactivityTimer = Timer(const Duration(milliseconds: 1400), _offerSupport);
+      _inactivityTimer =
+          Timer(const Duration(milliseconds: 1400), _offerSupport);
     }
   }
 
@@ -267,15 +258,17 @@ class ExplorationFunnelController extends StateNotifier<ExplorationFunnelState> 
       return SyntheticCloudChoiceResult.unavailable;
     }
 
-    final result = await ref.read(syntheticEngine2ServiceProvider).submitSelection(
-          sessionId: sessionId,
-          task: task,
-          optionId: optionId,
-          telemetry: telemetry,
-          supportLevel: state.support.level,
-        );
+    final result =
+        await ref.read(syntheticEngine2ServiceProvider).submitSelection(
+              sessionId: sessionId,
+              task: task,
+              optionId: optionId,
+              telemetry: telemetry,
+              supportLevel: state.support.level,
+            );
     if (result.status == SyntheticEngine2Status.unavailable) {
-      state = state.copyWith(error: result.reason ?? 'The synthetic cloud task is unavailable.');
+      state = state.copyWith(
+          error: result.reason ?? 'The synthetic cloud task is unavailable.');
       return SyntheticCloudChoiceResult.unavailable;
     }
     if (result.isUnsolved) {
@@ -292,7 +285,8 @@ class ExplorationFunnelController extends StateNotifier<ExplorationFunnelState> 
 
   void _adoptSyntheticCloudResult(SyntheticEngine2Result result) {
     if (result.status == SyntheticEngine2Status.unavailable) {
-      state = state.copyWith(error: result.reason ?? 'The synthetic cloud task is unavailable.');
+      state = state.copyWith(
+          error: result.reason ?? 'The synthetic cloud task is unavailable.');
       return;
     }
     if (result.isComplete) {
@@ -313,11 +307,14 @@ class ExplorationFunnelController extends StateNotifier<ExplorationFunnelState> 
     }
     final task = result.nextTask;
     if (!result.isInProgress || task == null || result.sessionId == null) {
-      state = state.copyWith(error: result.reason ?? 'The synthetic cloud task is incomplete.');
+      state = state.copyWith(
+          error: result.reason ?? 'The synthetic cloud task is incomplete.');
       return;
     }
     state = state.copyWith(
-      phase: task.layer == 1 ? ExplorationPhase.ambientBaseline : ExplorationPhase.deepening,
+      phase: task.layer == 1
+          ? ExplorationPhase.ambientBaseline
+          : ExplorationPhase.deepening,
       currentTask: task,
       taskQueue: const [],
       activeMechanics: result.activeSectors,
@@ -397,11 +394,15 @@ class ExplorationFunnelController extends StateNotifier<ExplorationFunnelState> 
     }
 
     final nextLayer = state.currentLayer + 1;
-    final survivorCount = activeDomainCountForLayer(nextLayer);
-    final survivors = ranked
-        .take(survivorCount)
-        .map((result) => result.mechanic)
-        .toList(growable: false);
+    // Select from the latest completed visual layer, rather than applying a
+    // predetermined 30→10→… count. Layer 1 retains every score that clears
+    // the deterministic strength threshold; later layers compare the latest
+    // results with that layer's strongest score; Layer 10 receives one final
+    // capstone mechanic.
+    final survivors = BuilderSurvivorSelector.selectForNextLayer(
+      completedLayer: state.currentLayer,
+      latestLayerResults: ranked,
+    );
 
     // A full builder queue always has one observation for every active
     // mechanic. The defensive fallback prevents a broken task from creating a

@@ -76,6 +76,10 @@ class _DeepeningFunnelCanvasState extends ConsumerState<DeepeningFunnelCanvas> {
                     childId: intake.childId,
                     layer: task.layer,
                     taskId: task.id,
+                    mechanic: task.mechanics.length == 1
+                        ? task.mechanics.single
+                        : PlayMechanic.visualPatternCompletion,
+                    itemCount: task.itemCount,
                     syntheticDemoWorld: intake.syntheticDemoWorld,
                     familiarColors: intake.familiarColors.toList(growable: false),
                     visualStylePreference: intake.visualStylePreference,

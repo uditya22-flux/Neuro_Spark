@@ -6,7 +6,6 @@ import 'package:mindbridge_app/features/exploration/services/deepening_task_fact
 import 'package:mindbridge_app/features/exploration/services/layer1_generator.dart';
 import 'package:mindbridge_app/features/exploration/services/play_routing_score_calculator.dart';
 import 'package:mindbridge_app/features/exploration/services/synthetic_demo_scene_mapper.dart';
-import 'package:mindbridge_app/features/exploration/providers/exploration_funnel_provider.dart';
 
 void main() {
   const intake = IntakeConfiguration(
@@ -17,14 +16,17 @@ void main() {
     sandboxPreference: SandboxPreference.constellation,
   );
 
-  test('ambient baseline covers all 30 mechanics through ten compounded scenes', () {
+  test('ambient baseline covers all 30 mechanics through ten compounded scenes',
+      () {
     final scenes = Layer1Generator.generate(intake: intake, seed: 2);
     expect(scenes, hasLength(10));
-    expect(scenes.expand((scene) => scene.mechanics).toSet(), equals(PlayMechanic.values.toSet()));
+    expect(scenes.expand((scene) => scene.mechanics).toSet(),
+        equals(PlayMechanic.values.toSet()));
     expect(scenes.every((scene) => scene.mechanics.length == 3), isTrue);
   });
 
-  test('Layer 1 stays a balanced six-group, thirty-sector visual catalogue', () {
+  test('Layer 1 stays a balanced six-group, thirty-sector visual catalogue',
+      () {
     expect(PlayMechanic.values, hasLength(30));
     expect(PlayMechanicGroup.values, hasLength(6));
     for (final group in PlayMechanicGroup.values) {
@@ -42,16 +44,52 @@ void main() {
     }
   });
 
-  test('builder Layer 1 contains one shuffled, themed task for every mechanic', () {
-    final firstRun = Layer1Generator.generateBuilderShowcase(intake: intake, seed: 27);
-    final secondRun = Layer1Generator.generateBuilderShowcase(intake: intake, seed: 27);
+  test('local builder scenes keep all thirty mechanics visually distinct', () {
+    final plans = PlayMechanic.values
+        .map(VisualPuzzlePlan.localForMechanic)
+        .toList(growable: false);
+
+    expect(plans, hasLength(30));
+    expect(
+      plans.map((plan) => plan.rule).toSet(),
+      hasLength(30),
+      reason: 'Each Layer 1 sector needs its own word-free visual rule.',
+    );
+
+    for (final mechanic in PlayMechanic.values) {
+      final plan = VisualPuzzlePlan.localForMechanic(mechanic);
+      final scene = VisualSceneSpec.localForMechanic(
+        mechanic: mechanic,
+        itemCount: 3,
+        subject: 'vehicles',
+        palette: const ['blue', 'green'],
+        objectStyle: VisualStylePreference.illustratedObjects.name,
+        motionAllowed: true,
+      );
+
+      expect(plan.rule, visualPuzzleRuleForMechanic(mechanic));
+      expect(plan.stimulus, isNotEmpty);
+      expect(scene.puzzlePlan?.rule, plan.rule);
+      expect(scene.sceneType, plan.kind.wireName);
+    }
+  });
+
+  test('builder Layer 1 contains one shuffled, themed task for every mechanic',
+      () {
+    final firstRun =
+        Layer1Generator.generateBuilderShowcase(intake: intake, seed: 27);
+    final secondRun =
+        Layer1Generator.generateBuilderShowcase(intake: intake, seed: 27);
 
     expect(firstRun, hasLength(30));
-    expect(firstRun.map((task) => task.id), equals(secondRun.map((task) => task.id)));
-    expect(firstRun.map((task) => task.mechanics.single).toSet(), equals(PlayMechanic.values.toSet()));
+    expect(firstRun.map((task) => task.id),
+        equals(secondRun.map((task) => task.id)));
+    expect(firstRun.map((task) => task.mechanics.single).toSet(),
+        equals(PlayMechanic.values.toSet()));
     expect(firstRun.every((task) => task.mechanics.length == 1), isTrue);
     expect(firstRun.every((task) => task.layer == 1), isTrue);
-    expect(firstRun.every((task) => task.visualThemeKey.contains('Trains')), isTrue);
+    expect(firstRun.every((task) => task.visualThemeKey.contains('Trains')),
+        isTrue);
   });
 
   test('builder layers only create tasks for their surviving mechanics', () {
@@ -70,17 +108,189 @@ void main() {
     );
 
     expect(layer2, hasLength(10));
-    expect(layer2.map((task) => task.mechanics.single).toSet(), equals(survivors.toSet()));
+    expect(layer2.map((task) => task.mechanics.single).toSet(),
+        equals(survivors.toSet()));
     expect(layer2.every((task) => task.difficulty == 2), isTrue);
     expect(layer2.every((task) => task.itemCount > 3), isTrue);
     expect(layer6, hasLength(5));
     expect(layer6.every((task) => task.difficulty == 6), isTrue);
   });
 
-  test('builder filtration schedule is 30 to 10 to one', () {
+  test('Layer 1 retains every deterministic strong sector, not a fixed Top 10',
+      () {
+    const results = [
+      PlayRoutingResult(
+        mechanic: PlayMechanic.mentalRotation,
+        score: 92,
+        accuracy: 1,
+        recovery: 1,
+        engagement: 1,
+        speed: .2,
+        supportLevelUsed: 0,
+      ),
+      PlayRoutingResult(
+        mechanic: PlayMechanic.visualPatternCompletion,
+        score: 65,
+        accuracy: .7,
+        recovery: 1,
+        engagement: .8,
+        speed: .2,
+        supportLevelUsed: 0,
+      ),
+      PlayRoutingResult(
+        mechanic: PlayMechanic.pointCloudAnomalyDetection,
+        score: 59,
+        accuracy: .7,
+        recovery: 1,
+        engagement: .8,
+        speed: .2,
+        supportLevelUsed: 0,
+      ),
+    ];
+
     expect(
-      List.generate(10, (index) => ExplorationFunnelController.activeDomainCountForLayer(index + 1)),
-      equals([30, 10, 8, 7, 6, 5, 4, 3, 2, 1]),
+      BuilderSurvivorSelector.selectForNextLayer(
+        completedLayer: 1,
+        latestLayerResults: results.reversed,
+      ),
+      equals([
+        PlayMechanic.mentalRotation,
+        PlayMechanic.visualPatternCompletion,
+      ]),
+    );
+  });
+
+  test('later builder layers filter only their most recent response scores',
+      () {
+    const latestLayerResults = [
+      PlayRoutingResult(
+        mechanic: PlayMechanic.mapRouteNavigation,
+        score: 95,
+        accuracy: 1,
+        recovery: 1,
+        engagement: 1,
+        speed: .5,
+        supportLevelUsed: 0,
+      ),
+      PlayRoutingResult(
+        mechanic: PlayMechanic.visualSpatialConstruction,
+        score: 84,
+        accuracy: .9,
+        recovery: 1,
+        engagement: .9,
+        speed: .4,
+        supportLevelUsed: 0,
+      ),
+      PlayRoutingResult(
+        mechanic: PlayMechanic.chronologicalSequencing,
+        score: 83.5,
+        accuracy: .9,
+        recovery: 1,
+        engagement: .9,
+        speed: .4,
+        supportLevelUsed: 0,
+      ),
+      PlayRoutingResult(
+        mechanic: PlayMechanic.narrativeEventOrdering,
+        score: 70,
+        accuracy: .8,
+        recovery: .8,
+        engagement: .8,
+        speed: .4,
+        supportLevelUsed: 0,
+      ),
+    ];
+
+    // 95 × .88 = 83.6. The selection is driven solely by these latest
+    // results: no historical rank and no fixed sector count is consulted.
+    expect(
+      BuilderSurvivorSelector.selectForNextLayer(
+        completedLayer: 4,
+        latestLayerResults: latestLayerResults,
+      ),
+      equals([
+        PlayMechanic.mapRouteNavigation,
+        PlayMechanic.visualSpatialConstruction,
+        PlayMechanic.chronologicalSequencing,
+        PlayMechanic.narrativeEventOrdering,
+      ]),
+    );
+  });
+
+  test('response-driven threshold can narrow a Layer 1 pool from 30 to 20', () {
+    final results = List<PlayRoutingResult>.generate(
+      PlayMechanic.values.length,
+      (index) => PlayRoutingResult(
+        mechanic: PlayMechanic.values[index],
+        score: (index < 20 ? 80 - index : 59).toDouble(),
+        accuracy: 1,
+        recovery: 1,
+        engagement: 1,
+        speed: .2,
+        supportLevelUsed: 0,
+      ),
+    );
+
+    final survivors = BuilderSurvivorSelector.selectForNextLayer(
+      completedLayer: 1,
+      latestLayerResults: results.reversed,
+    );
+
+    expect(survivors, hasLength(20));
+    expect(survivors, equals(PlayMechanic.values.take(20).toList()));
+  });
+
+  test('response-driven threshold can narrow a later pool from 20 to 5', () {
+    final results = List<PlayRoutingResult>.generate(
+      20,
+      (index) => PlayRoutingResult(
+        mechanic: PlayMechanic.values[index],
+        score: (index < 5 ? 80 - index : 59).toDouble(),
+        accuracy: 1,
+        recovery: 1,
+        engagement: 1,
+        speed: .2,
+        supportLevelUsed: 0,
+      ),
+    );
+
+    final survivors = BuilderSurvivorSelector.selectForNextLayer(
+      completedLayer: 5,
+      latestLayerResults: results,
+    );
+
+    expect(survivors, hasLength(5));
+    expect(survivors, equals(PlayMechanic.values.take(5).toList()));
+  });
+
+  test('the Layer 10 capstone receives exactly one latest-layer winner', () {
+    const results = [
+      PlayRoutingResult(
+        mechanic: PlayMechanic.chronologicalSequencing,
+        score: 88,
+        accuracy: 1,
+        recovery: 1,
+        engagement: 1,
+        speed: .2,
+        supportLevelUsed: 0,
+      ),
+      PlayRoutingResult(
+        mechanic: PlayMechanic.mapRouteNavigation,
+        score: 93,
+        accuracy: 1,
+        recovery: 1,
+        engagement: 1,
+        speed: .3,
+        supportLevelUsed: 0,
+      ),
+    ];
+
+    expect(
+      BuilderSurvivorSelector.selectForNextLayer(
+        completedLayer: 9,
+        latestLayerResults: results,
+      ),
+      equals([PlayMechanic.mapRouteNavigation]),
     );
   });
 
@@ -109,7 +319,7 @@ void main() {
     expect(result.speed, .5);
   });
 
-  test('ranking produces a deterministic Top 10 from all thirty mechanics', () {
+  test('a weak Layer 1 still keeps the strongest response moving', () {
     final observations = PlayMechanic.values
         .map(
           (mechanic) => PlayObservation(
@@ -128,15 +338,29 @@ void main() {
         )
         .toList(growable: false);
 
-    final topTen = PlayRoutingScoreCalculator.rank(observations)
-        .take(10)
-        .map((result) => result.mechanic)
-        .toList(growable: false);
+    final ranked = PlayRoutingScoreCalculator.rank(observations);
+    final survivors = BuilderSurvivorSelector.selectForNextLayer(
+      completedLayer: 1,
+      latestLayerResults: ranked.map(
+        (result) => PlayRoutingResult(
+          mechanic: result.mechanic,
+          score: 20 + result.mechanic.index * .01,
+          accuracy: result.accuracy,
+          recovery: result.recovery,
+          engagement: result.engagement,
+          speed: result.speed,
+          supportLevelUsed: result.supportLevelUsed,
+        ),
+      ),
+    );
 
-    expect(topTen, equals(PlayMechanic.values.take(10).toList()));
+    expect(survivors, hasLength(1));
+    expect(survivors.single, PlayMechanic.visualArtisticComposition);
   });
 
-  test('deepening rotates play mechanics without removing them from a child ranking', () {
+  test(
+      'deepening rotates play mechanics without removing them from a child ranking',
+      () {
     final layer2 = DeepeningTaskFactory.build(intake: intake, layer: 2);
     final layer8 = DeepeningTaskFactory.build(intake: intake, layer: 8);
     expect(layer2.mechanics, isNot(equals(layer8.mechanics)));
@@ -148,7 +372,9 @@ void main() {
     expect(layer6.showsDistractors, isFalse);
   });
 
-  test('guardian support preferences restore into the same interface configuration', () {
+  test(
+      'guardian support preferences restore into the same interface configuration',
+      () {
     const configured = IntakeConfiguration(
       childId: '00000000-0000-0000-0000-000000000001',
       audioLimit: 20,
@@ -174,16 +400,19 @@ void main() {
     expect(restored.interface.preferHaptics, isTrue);
     expect(restored.interface.allowMotion, isFalse);
     expect(restored.interface.showTimePressure, isFalse);
-    expect(restored.interface.communicationPreference, CommunicationPreference.symbolsOrAac);
+    expect(restored.interface.communicationPreference,
+        CommunicationPreference.symbolsOrAac);
   });
 
   test('guardian sandbox preference determines the final destination', () {
-    expect(CapstoneRouter.verticalIdFor(intake.sandboxPreference), 'constellation_mapper');
+    expect(CapstoneRouter.verticalIdFor(intake.sandboxPreference),
+        'constellation_mapper');
   });
 
   test('capstone mapping is available only for direct sandbox mechanics', () {
     expect(
-      CapstoneRouter.verticalIdForPlayMechanic(PlayMechanic.chronologicalSequencing),
+      CapstoneRouter.verticalIdForPlayMechanic(
+          PlayMechanic.chronologicalSequencing),
       'calendar_genius',
     );
     expect(
@@ -191,12 +420,15 @@ void main() {
       'constellation_mapper',
     );
     expect(
-      CapstoneRouter.verticalIdForPlayMechanic(PlayMechanic.visualArtisticComposition),
+      CapstoneRouter.verticalIdForPlayMechanic(
+          PlayMechanic.visualArtisticComposition),
       isNull,
     );
   });
 
-  test('every fictional parent-text input gets a stable demo scene family locally', () {
+  test(
+      'every fictional parent-text input gets a stable demo scene family locally',
+      () {
     expect(
       SyntheticDemoSceneMapper.fromIntakeText(
         theme: 'Metro maps and train stations',
@@ -239,7 +471,8 @@ void main() {
     final scene = Layer1Generator.generate(intake: personalised, seed: 7).first;
 
     expect(scene.visualThemeKey, contains('City buses'));
-    expect(scene.familiarColors, containsAll({FamiliarColor.blue, FamiliarColor.green}));
+    expect(scene.familiarColors,
+        containsAll({FamiliarColor.blue, FamiliarColor.green}));
     expect(scene.interactionPreference, InteractionPreference.dragging);
     expect(scene.visualRepetitionHelpful, isTrue);
     expect(scene.allowMotion, isFalse);

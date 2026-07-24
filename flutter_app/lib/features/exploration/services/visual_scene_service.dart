@@ -11,6 +11,8 @@ class VisualSceneRequest {
     required this.childId,
     required this.layer,
     required this.taskId,
+    required this.mechanic,
+    required this.itemCount,
     this.syntheticDemoWorld,
     this.familiarColors = const [],
     this.visualStylePreference = VisualStylePreference.illustratedObjects,
@@ -20,6 +22,8 @@ class VisualSceneRequest {
   final String childId;
   final int layer;
   final String taskId;
+  final PlayMechanic mechanic;
+  final int itemCount;
   final SyntheticDemoWorld? syntheticDemoWorld;
   final List<FamiliarColor> familiarColors;
   final VisualStylePreference visualStylePreference;
@@ -44,6 +48,8 @@ class VisualSceneRequest {
       other.childId == childId &&
       other.layer == layer &&
       other.taskId == taskId &&
+      other.mechanic == mechanic &&
+      other.itemCount == itemCount &&
       other.syntheticDemoWorld == syntheticDemoWorld &&
       listEquals(other.familiarColors, familiarColors) &&
       other.visualStylePreference == visualStylePreference &&
@@ -54,6 +60,8 @@ class VisualSceneRequest {
         childId,
         layer,
         taskId,
+        mechanic,
+        itemCount,
         syntheticDemoWorld,
         Object.hashAll(familiarColors),
         visualStylePreference,
@@ -63,8 +71,19 @@ class VisualSceneRequest {
 
 class VisualSceneService {
   Future<VisualSceneSpec?> load(VisualSceneRequest request) async {
-    // Offline prototype builds never make an AI request.
-    if (localPrototypeMode || builderShowcaseMode) return null;
+    // Offline and builder builds never make an AI request, but they still
+    // return the same rule-specific scene shape as cloud builds. This avoids
+    // a generic colour-match fallback for the 30-sector showcase.
+    if (localPrototypeMode || builderShowcaseMode) {
+      return VisualSceneSpec.localForMechanic(
+        mechanic: request.mechanic,
+        itemCount: request.itemCount,
+        subject: (request.syntheticDemoWorld ?? SyntheticDemoWorld.vehicles).name,
+        palette: request.familiarColors.map((color) => color.name).toList(growable: false),
+        objectStyle: request.visualStylePreference.name,
+        motionAllowed: request.motionAllowed,
+      );
+    }
     try {
       if (syntheticDemoMode) {
         if (Supabase.instance.client.auth.currentSession == null) return null;

@@ -208,6 +208,64 @@ VisualPuzzleKind visualPuzzleKindForMechanic(PlayMechanic mechanic) {
   }
 }
 
+/// Maps the fixed Layer 1 taxonomy to the exact word-free visual treatment
+/// Flutter draws. Keeping this mapping local means an offline builder session
+/// is never reduced to a generic colour-match prompt while a cloud scene is
+/// loading or unavailable.
+VisualPuzzleRule visualPuzzleRuleForMechanic(PlayMechanic mechanic) => switch (mechanic) {
+      // Spatial / visual
+      PlayMechanic.mentalRotation => VisualPuzzleRule.matchMentalRotation,
+      PlayMechanic.visualPatternCompletion => VisualPuzzleRule.completeVisualPattern,
+      PlayMechanic.pointCloudAnomalyDetection => VisualPuzzleRule.detectPointCloudAnomaly,
+      PlayMechanic.mapRouteNavigation => VisualPuzzleRule.navigateMapRoute,
+      PlayMechanic.visualSpatialConstruction => VisualPuzzleRule.reconstructSpatialTarget,
+
+      // Temporal / sequential
+      PlayMechanic.chronologicalSequencing => VisualPuzzleRule.orderPictureCycle,
+      PlayMechanic.narrativeEventOrdering => VisualPuzzleRule.orderStoryPanels,
+      PlayMechanic.causeAndEffectChains => VisualPuzzleRule.chooseEffect,
+      PlayMechanic.rhythmicMotorSequencing => VisualPuzzleRule.repeatRhythm,
+      PlayMechanic.proceduralSequencing => VisualPuzzleRule.orderProcedureIcons,
+
+      // Numeric / logical
+      PlayMechanic.numberPatternRecognition => VisualPuzzleRule.completeQuantityPattern,
+      PlayMechanic.ruleDiscovery => VisualPuzzleRule.discoverVisualRule,
+      PlayMechanic.multiAttributeSorting => VisualPuzzleRule.sortMultipleAttributes,
+      PlayMechanic.systemizing => VisualPuzzleRule.findSharedProperty,
+      PlayMechanic.quantitativeEstimation => VisualPuzzleRule.chooseLargerDotCloud,
+
+      // Wordless language / meaning proxies
+      PlayMechanic.pictureAssociation => VisualPuzzleRule.matchPictureAssociation,
+      PlayMechanic.phonologicalPatternRecognition => VisualPuzzleRule.matchPhonologicalPattern,
+      PlayMechanic.wordlessInference => VisualPuzzleRule.chooseStoryNext,
+      PlayMechanic.analogyMapping => VisualPuzzleRule.completePictureAnalogy,
+      PlayMechanic.creativeStorytelling => VisualPuzzleRule.arrangeStoryPanels,
+
+      // Memory / attention
+      PlayMechanic.workingMemorySpan => VisualPuzzleRule.replayCellSequence,
+      PlayMechanic.visualSceneMemory => VisualPuzzleRule.findSceneChange,
+      PlayMechanic.sustainedAttention => VisualPuzzleRule.identifyTargetStream,
+      PlayMechanic.auditorySequenceRecall => VisualPuzzleRule.replayToneSequence,
+      PlayMechanic.selectiveAttention => VisualPuzzleRule.findSelectiveTarget,
+
+      // Social-emotional / creative play
+      PlayMechanic.emotionRecognition => VisualPuzzleRule.matchEmotionIcon,
+      PlayMechanic.perspectiveTaking => VisualPuzzleRule.choosePerspectiveOutcome,
+      PlayMechanic.turnTakingStrategy => VisualPuzzleRule.chooseTurnStrategy,
+      PlayMechanic.musicalPatternRecognition => VisualPuzzleRule.matchMelodyPattern,
+      PlayMechanic.visualArtisticComposition => VisualPuzzleRule.completeVisualComposition,
+    };
+
+/// A bounded, deterministic visual trace for a local Layer 1 plan. These are
+/// not answers or scores: they only make each mechanic visibly different when
+/// the synthetic scene service is deliberately disabled for a builder demo.
+List<int> visualStimulusForMechanic(PlayMechanic mechanic) {
+  final seed = mechanic.index + 1;
+  return List<int>.unmodifiable(
+    List<int>.generate(4 + (seed % 2), (index) => (seed * 3 + index * 5) % 16),
+  );
+}
+
 class VisualPuzzlePlan {
   const VisualPuzzlePlan({
     required this.kind,
@@ -253,6 +311,17 @@ class VisualPuzzlePlan {
   /// An allowlisted backend rule. Flutter never renders its name as text; it
   /// only uses the enum to choose a fixed visual treatment.
   final VisualPuzzleRule? rule;
+
+  /// Produces a fixed, safe visual plan for a local/builder session. The
+  /// opaque issued task remains authoritative for which option is correct;
+  /// [resolveFor] binds that answer after this plan is created.
+  factory VisualPuzzlePlan.localForMechanic(PlayMechanic mechanic) => VisualPuzzlePlan(
+        kind: visualPuzzleKindForMechanic(mechanic),
+        variant: mechanic.index % 8,
+        requestedSector: mechanic,
+        stimulus: visualStimulusForMechanic(mechanic),
+        rule: visualPuzzleRuleForMechanic(mechanic),
+      );
 
   factory VisualPuzzlePlan.fromJson(Map<String, dynamic> json) {
     final rawOptionValues =
@@ -411,6 +480,35 @@ class VisualSceneSpec {
   final String onTapAnimation;
   final String successAnimation;
   final VisualPuzzlePlan? puzzlePlan;
+
+  /// A local, deterministic scene for builder/offline sessions. It uses the
+  /// same bounded plan contract as the cloud response, so the renderer sees
+  /// the exact sector rule even when no network request is made.
+  factory VisualSceneSpec.localForMechanic({
+    required PlayMechanic mechanic,
+    required int itemCount,
+    required String subject,
+    required List<String> palette,
+    required String objectStyle,
+    required bool motionAllowed,
+  }) {
+    final kind = visualPuzzleKindForMechanic(mechanic);
+    return VisualSceneSpec(
+      sceneType: kind.wireName,
+      subject: subject,
+      palette: palette.isEmpty ? const ['blue', 'green', 'yellow'] : palette.take(3).toList(growable: false),
+      objectStyle: objectStyle,
+      layout: switch (kind) {
+        VisualPuzzleKind.route => 'path',
+        VisualPuzzleKind.sequence => 'leftToRight',
+        _ => 'grid',
+      },
+      itemCount: itemCount.clamp(3, 5).toInt(),
+      onTapAnimation: motionAllowed ? 'snap' : 'none',
+      successAnimation: motionAllowed ? 'gentlePulse' : 'settle',
+      puzzlePlan: VisualPuzzlePlan.localForMechanic(mechanic),
+    );
+  }
 
   factory VisualSceneSpec.fromJson(Map<String, dynamic> json) {
     final animation = json['animation'] as Map<String, dynamic>? ?? const {};

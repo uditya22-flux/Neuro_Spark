@@ -8,6 +8,10 @@ import {
   requireAuth,
 } from '../_shared/auth.ts';
 import { ValidationError } from '../_shared/validate.ts';
+import {
+  selectSyntheticSurvivors,
+  type SyntheticLayerSignal,
+} from '../_shared/synthetic_engine2_funnel.ts';
 
 // This endpoint is intentionally a synthetic-cloud-showcase boundary. It is
 // never given a child ID, guardian ID, name, intake text, theme text, or a
@@ -95,6 +99,78 @@ const sceneTypes = [
 ] as const;
 type SceneType = typeof sceneTypes[number];
 
+// A scene type only chooses Flutter's broad stage. These two vocabularies
+// make the actual word-free activity unambiguous. They are fixed enum values,
+// never model text or guardian input, so Flutter can safely render a distinct
+// visual treatment for every Layer 1 sector.
+const interactionPlans = [
+  'tap_rotated_match',
+  'tap_pattern_piece',
+  'tap_outlier_point',
+  'drag_map_route',
+  'drag_target_pieces',
+  'drag_cycle_order',
+  'drag_story_order',
+  'tap_effect_choice',
+  'tap_rhythm_replay',
+  'drag_procedure_order',
+  'tap_quantity_next',
+  'drag_rule_sort',
+  'drag_attribute_bins',
+  'tap_shared_property',
+  'tap_larger_cloud',
+  'tap_related_picture',
+  'tap_sound_pair',
+  'tap_story_outcome',
+  'tap_analogy_piece',
+  'drag_story_build',
+  'tap_memory_cells',
+  'tap_scene_difference',
+  'tap_stream_target',
+  'tap_tone_replay',
+  'tap_hidden_target',
+  'tap_emotion_icon',
+  'tap_perspective_outcome',
+  'tap_turn_strategy',
+  'tap_melody_match',
+  'drag_symmetry_piece',
+] as const;
+type InteractionPlan = typeof interactionPlans[number];
+
+const stimulusTemplates = [
+  'rotating_shape_match',
+  'pattern_grid_gap',
+  'point_cloud_odd_one_out',
+  'animated_maze_path',
+  'target_picture_rebuild',
+  'picture_growth_cycle',
+  'wordless_comic_order',
+  'action_effect_scene',
+  'light_pulse_pattern',
+  'procedure_icon_order',
+  'dot_quantity_pattern',
+  'demonstrated_visual_rule',
+  'multi_attribute_bins',
+  'shared_property_scatter',
+  'brief_dot_cloud_compare',
+  'picture_concept_match',
+  'nonword_sound_pair',
+  'picture_story_next',
+  'picture_analogy_grid',
+  'wordless_story_builder',
+  'lit_cell_replay',
+  'scene_change_pair',
+  'target_shape_stream',
+  'tone_icon_replay',
+  'hidden_target_field',
+  'emotion_icon_scene',
+  'perspective_scene_outcome',
+  'turn_strategy_board',
+  'melody_pattern_icons',
+  'symmetry_composition',
+] as const;
+type StimulusTemplate = typeof stimulusTemplates[number];
+
 // Rules are a fixed, non-verbal visual vocabulary. The server, rather than an
 // LLM, owns the rule, stimulus, answer value, and target option for every
 // task. This keeps a choice tied to an actual displayed puzzle plan.
@@ -142,6 +218,8 @@ const colorSet = new Set<string>(colors);
 const styleSet = new Set<string>(objectStyles);
 const interactionSet = new Set<string>(interactions);
 const sceneTypeSet = new Set<string>(sceneTypes);
+const interactionPlanSet = new Set<string>(interactionPlans);
+const stimulusTemplateSet = new Set<string>(stimulusTemplates);
 const layoutSet = new Set<string>(layouts);
 const animationSet = new Set<string>(animations);
 const optionIdSet = new Set<string>(optionIds);
@@ -151,100 +229,156 @@ type SectorBlueprint = {
   group: SectorGroup;
   sceneType: SceneType;
   rule: PuzzleRule;
+  interaction: InteractionPlan;
+  stimulusTemplate: StimulusTemplate;
 };
 
 const sectorPuzzleBlueprints: Record<Sector, SectorBlueprint> = {
   mentalRotation: {
     group: 'spatialVisual', sceneType: 'rotate', rule: 'matchMentalRotation',
+    interaction: 'tap_rotated_match', stimulusTemplate: 'rotating_shape_match',
   },
   visualPatternCompletion: {
     group: 'spatialVisual', sceneType: 'pattern', rule: 'completeVisualPattern',
+    interaction: 'tap_pattern_piece', stimulusTemplate: 'pattern_grid_gap',
   },
   pointCloudAnomalyDetection: {
     group: 'spatialVisual', sceneType: 'search', rule: 'detectPointCloudAnomaly',
+    interaction: 'tap_outlier_point', stimulusTemplate: 'point_cloud_odd_one_out',
   },
   mapRouteNavigation: {
     group: 'spatialVisual', sceneType: 'route', rule: 'navigateMapRoute',
+    interaction: 'drag_map_route', stimulusTemplate: 'animated_maze_path',
   },
   visualSpatialConstruction: {
     group: 'spatialVisual', sceneType: 'connect', rule: 'reconstructSpatialTarget',
+    interaction: 'drag_target_pieces', stimulusTemplate: 'target_picture_rebuild',
   },
   chronologicalSequencing: {
     group: 'temporalSequential', sceneType: 'sequence', rule: 'orderPictureCycle',
+    interaction: 'drag_cycle_order', stimulusTemplate: 'picture_growth_cycle',
   },
   narrativeEventOrdering: {
     group: 'temporalSequential', sceneType: 'sequence', rule: 'orderStoryPanels',
+    interaction: 'drag_story_order', stimulusTemplate: 'wordless_comic_order',
   },
   causeAndEffectChains: {
     group: 'temporalSequential', sceneType: 'repair', rule: 'chooseEffect',
+    interaction: 'tap_effect_choice', stimulusTemplate: 'action_effect_scene',
   },
   rhythmicMotorSequencing: {
     group: 'temporalSequential', sceneType: 'rhythm', rule: 'repeatRhythm',
+    interaction: 'tap_rhythm_replay', stimulusTemplate: 'light_pulse_pattern',
   },
   proceduralSequencing: {
     group: 'temporalSequential', sceneType: 'sequence', rule: 'orderProcedureIcons',
+    interaction: 'drag_procedure_order', stimulusTemplate: 'procedure_icon_order',
   },
   numberPatternRecognition: {
     group: 'numericLogical', sceneType: 'pattern', rule: 'completeQuantityPattern',
+    interaction: 'tap_quantity_next', stimulusTemplate: 'dot_quantity_pattern',
   },
   ruleDiscovery: {
     group: 'numericLogical', sceneType: 'sort', rule: 'discoverVisualRule',
+    interaction: 'drag_rule_sort', stimulusTemplate: 'demonstrated_visual_rule',
   },
   multiAttributeSorting: {
     group: 'numericLogical', sceneType: 'sort', rule: 'sortMultipleAttributes',
+    interaction: 'drag_attribute_bins', stimulusTemplate: 'multi_attribute_bins',
   },
   systemizing: {
-    group: 'numericLogical', sceneType: 'sort', rule: 'findSharedProperty',
+    group: 'numericLogical', sceneType: 'search', rule: 'findSharedProperty',
+    interaction: 'tap_shared_property', stimulusTemplate: 'shared_property_scatter',
   },
   quantitativeEstimation: {
     group: 'numericLogical', sceneType: 'quantity', rule: 'chooseLargerDotCloud',
+    interaction: 'tap_larger_cloud', stimulusTemplate: 'brief_dot_cloud_compare',
   },
   pictureAssociation: {
     group: 'nonVerbalLanguage', sceneType: 'match', rule: 'matchPictureAssociation',
+    interaction: 'tap_related_picture', stimulusTemplate: 'picture_concept_match',
   },
   phonologicalPatternRecognition: {
     group: 'nonVerbalLanguage', sceneType: 'rhythm', rule: 'matchPhonologicalPattern',
+    interaction: 'tap_sound_pair', stimulusTemplate: 'nonword_sound_pair',
   },
   wordlessInference: {
     group: 'nonVerbalLanguage', sceneType: 'sequence', rule: 'chooseStoryNext',
+    interaction: 'tap_story_outcome', stimulusTemplate: 'picture_story_next',
   },
   analogyMapping: {
     group: 'nonVerbalLanguage', sceneType: 'match', rule: 'completePictureAnalogy',
+    interaction: 'tap_analogy_piece', stimulusTemplate: 'picture_analogy_grid',
   },
   creativeStorytelling: {
     group: 'nonVerbalLanguage', sceneType: 'connect', rule: 'arrangeStoryPanels',
+    interaction: 'drag_story_build', stimulusTemplate: 'wordless_story_builder',
   },
   workingMemorySpan: {
     group: 'memoryAttention', sceneType: 'memory', rule: 'replayCellSequence',
+    interaction: 'tap_memory_cells', stimulusTemplate: 'lit_cell_replay',
   },
   visualSceneMemory: {
     group: 'memoryAttention', sceneType: 'memory', rule: 'findSceneChange',
+    interaction: 'tap_scene_difference', stimulusTemplate: 'scene_change_pair',
   },
   sustainedAttention: {
     group: 'memoryAttention', sceneType: 'search', rule: 'identifyTargetStream',
+    interaction: 'tap_stream_target', stimulusTemplate: 'target_shape_stream',
   },
   auditorySequenceRecall: {
     group: 'memoryAttention', sceneType: 'rhythm', rule: 'replayToneSequence',
+    interaction: 'tap_tone_replay', stimulusTemplate: 'tone_icon_replay',
   },
   selectiveAttention: {
     group: 'memoryAttention', sceneType: 'search', rule: 'findSelectiveTarget',
+    interaction: 'tap_hidden_target', stimulusTemplate: 'hidden_target_field',
   },
   emotionRecognition: {
     group: 'socialCreative', sceneType: 'match', rule: 'matchEmotionIcon',
+    interaction: 'tap_emotion_icon', stimulusTemplate: 'emotion_icon_scene',
   },
   perspectiveTaking: {
     group: 'socialCreative', sceneType: 'sequence', rule: 'choosePerspectiveOutcome',
+    interaction: 'tap_perspective_outcome', stimulusTemplate: 'perspective_scene_outcome',
   },
   turnTakingStrategy: {
-    group: 'socialCreative', sceneType: 'rhythm', rule: 'chooseTurnStrategy',
+    group: 'socialCreative', sceneType: 'switch', rule: 'chooseTurnStrategy',
+    interaction: 'tap_turn_strategy', stimulusTemplate: 'turn_strategy_board',
   },
   musicalPatternRecognition: {
     group: 'socialCreative', sceneType: 'rhythm', rule: 'matchMelodyPattern',
+    interaction: 'tap_melody_match', stimulusTemplate: 'melody_pattern_icons',
   },
   visualArtisticComposition: {
-    group: 'socialCreative', sceneType: 'connect', rule: 'completeVisualComposition',
+    group: 'socialCreative', sceneType: 'shape', rule: 'completeVisualComposition',
+    interaction: 'drag_symmetry_piece', stimulusTemplate: 'symmetry_composition',
   },
 };
+
+// Keep the Layer 1 breadth catalogue fail-closed. A future edit cannot
+// silently collapse a sector into a generic colour/shape task: every one of
+// the exact thirty sectors must retain a rule, interaction and visual
+// template of its own before this Edge Function can serve a task.
+function validateSectorPuzzleBlueprintCatalogue(): void {
+  const blueprints = sectors.map((sector) => sectorPuzzleBlueprints[sector]);
+  if (sectors.length !== 30 || blueprints.length !== 30 ||
+      blueprints.some((blueprint) => !blueprint ||
+        !sectorGroupSet.has(blueprint.group) ||
+        !sceneTypeSet.has(blueprint.sceneType) ||
+        !puzzleRuleSet.has(blueprint.rule) ||
+        !interactionPlanSet.has(blueprint.interaction) ||
+        !stimulusTemplateSet.has(blueprint.stimulusTemplate))) {
+    throw new Error('Synthetic Engine 2 Layer 1 catalogue is invalid.');
+  }
+  if (new Set(blueprints.map((blueprint) => blueprint.rule)).size !== sectors.length ||
+      new Set(blueprints.map((blueprint) => blueprint.interaction)).size !== sectors.length ||
+      new Set(blueprints.map((blueprint) => blueprint.stimulusTemplate)).size !== sectors.length) {
+    throw new Error('Synthetic Engine 2 Layer 1 catalogue must keep one plan per sector.');
+  }
+}
+
+validateSectorPuzzleBlueprintCatalogue();
 
 type VisualPreferences = {
   world: World;
@@ -283,6 +417,13 @@ type PuzzlePlan = {
   group: SectorGroup;
   sceneType: SceneType;
   rule: PuzzleRule;
+  /// Exact fixed interaction for this sector (for example a drag route vs a
+  /// rhythm replay). This is independent from the guardian's preferred input
+  /// modality, which remains in `visual.interaction` for sensory adaptation.
+  interaction: InteractionPlan;
+  /// Fixed word-free visual treatment used by Flutter to select a distinct
+  /// scene composition inside the broader renderer stage.
+  stimulusTemplate: StimulusTemplate;
   variant: number;
   stimulus: number[];
   optionValues: number[];
@@ -517,10 +658,6 @@ function orderedSectors(seed: string): Sector[] {
   });
 }
 
-function survivorCountForLayer(layer: number): number {
-  return ({ 2: 10, 3: 8, 4: 7, 5: 6, 6: 5, 7: 4, 8: 3, 9: 2, 10: 1 } as Record<number, number>)[layer] ?? 1;
-}
-
 function speedBudgetFor(layer: number): number {
   return ({
     1: 12000,
@@ -584,7 +721,11 @@ function stimulusForRule(rule: PuzzleRule, seed: string): number[] {
     case 'findSharedProperty': return [a % 6, b % 6, c % 6];
     case 'chooseLargerDotCloud': {
       const firstCount = a % 5 + 1;
-      const secondCount = ((firstCount + 1 + seededValue(seed, 'larger-dot-cloud', 4)) % 5) + 1;
+      // The two clouds must never contain the same number of dots; otherwise
+      // the word-free comparison would be ambiguous. A one-to-four step on a
+      // five-value ring guarantees a distinct bounded count.
+      const step = 1 + seededValue(seed, 'larger-dot-cloud', 4);
+      const secondCount = ((firstCount - 1 + step) % 5) + 1;
       return [firstCount, secondCount];
     }
     // Non-verbal language proxies
@@ -673,8 +814,12 @@ function optionValuesFor(
 function validatePuzzlePlan(plan: PuzzlePlan, layer: number): void {
   if (plan.version !== 1) throw new Error('Synthetic puzzle plan has an invalid version.');
   const blueprint = sectorPuzzleBlueprints[plan.sector];
-  if (!blueprint || !sectorGroupSet.has(plan.group) || !sceneTypeSet.has(plan.sceneType) || !puzzleRuleSet.has(plan.rule) ||
-      plan.group !== blueprint.group || plan.sceneType !== blueprint.sceneType || plan.rule !== blueprint.rule) {
+  if (!blueprint || !sectorGroupSet.has(plan.group) || !sceneTypeSet.has(plan.sceneType) ||
+      !puzzleRuleSet.has(plan.rule) || !interactionPlanSet.has(plan.interaction) ||
+      !stimulusTemplateSet.has(plan.stimulusTemplate) || plan.group !== blueprint.group ||
+      plan.sceneType !== blueprint.sceneType || plan.rule !== blueprint.rule ||
+      plan.interaction !== blueprint.interaction ||
+      plan.stimulusTemplate !== blueprint.stimulusTemplate) {
     throw new Error('Synthetic puzzle plan does not match its assigned sector.');
   }
   if (!itemCountFitsLayer(plan.optionValues.length, layer)) {
@@ -711,6 +856,8 @@ function createPuzzlePlan(sector: Sector, layer: number, seed: string): PuzzlePl
     group: blueprint.group,
     sceneType: blueprint.sceneType,
     rule: blueprint.rule,
+    interaction: blueprint.interaction,
+    stimulusTemplate: blueprint.stimulusTemplate,
     variant: seededValue(planSeed, 'variant', 8),
     stimulus,
     optionValues,
@@ -991,6 +1138,8 @@ function taskPayload(
         sector_group: plan.group,
         scene_type: plan.sceneType,
         rule: plan.rule,
+        interaction: plan.interaction,
+        stimulus_template: plan.stimulusTemplate,
         variant: plan.variant,
         stimulus: plan.stimulus,
         option_values: plan.optionValues,
@@ -1078,6 +1227,8 @@ function taskHasCurrentPuzzlePlan(task: TaskRow): boolean {
       typeof plan.sector_group === 'string' && sectorGroupSet.has(plan.sector_group) &&
       typeof plan.scene_type === 'string' && sceneTypeSet.has(plan.scene_type) &&
       typeof plan.rule === 'string' && puzzleRuleSet.has(plan.rule) &&
+      typeof plan.interaction === 'string' && interactionPlanSet.has(plan.interaction) &&
+      typeof plan.stimulus_template === 'string' && stimulusTemplateSet.has(plan.stimulus_template) &&
       Array.isArray(plan.stimulus) && Array.isArray(plan.option_values) &&
       typeof plan.answer_value === 'number' && typeof plan.target_index === 'number';
   } catch (_) {
@@ -1214,7 +1365,7 @@ async function updateLayerState(
 async function rankLayer(
   serviceClient: { from: Function },
   session: SessionRow,
-): Promise<Sector[]> {
+): Promise<SyntheticLayerSignal<Sector>[]> {
   const active = asSectorList(session.active_sectors);
   const { data, error } = await serviceClient
     .from('synthetic_engine2_demo_events')
@@ -1229,14 +1380,20 @@ async function rankLayer(
   if (bySector.size !== active.length || active.some((sector) => !bySector.has(sector))) {
     throw new Error('Synthetic demo layer is incomplete.');
   }
-  return [...active].sort((left, right) => {
-    const leftRow = bySector.get(left)!;
-    const rightRow = bySector.get(right)!;
-    const scoreDelta = Number(rightRow.isolation_score) - Number(leftRow.isolation_score);
+  return active.map((sector, activeIndex) => {
+    const row = bySector.get(sector)!;
+    return {
+      sector,
+      isolationScore: Number(row.isolation_score),
+      supportLevel: Number(row.support_level),
+      activeIndex,
+    };
+  }).sort((left, right) => {
+    const scoreDelta = right.isolationScore - left.isolationScore;
     if (scoreDelta !== 0) return scoreDelta;
-    const supportDelta = Number(leftRow.support_level) - Number(rightRow.support_level);
+    const supportDelta = left.supportLevel - right.supportLevel;
     if (supportDelta !== 0) return supportDelta;
-    return active.indexOf(left) - active.indexOf(right);
+    return left.activeIndex - right.activeIndex;
   });
 }
 
@@ -1407,7 +1564,7 @@ async function handleCorrectAnswer(
 
   const ranked = await rankLayer(serviceClient, session);
   if (session.current_layer >= 10) {
-    const finalSector = ranked[0];
+    const finalSector = ranked[0].sector;
     const { data: completeSession, error: completeError } = await serviceClient
       .from('synthetic_engine2_demo_sessions')
       .update({
@@ -1425,7 +1582,10 @@ async function handleCorrectAnswer(
   }
 
   const nextLayer = session.current_layer + 1;
-  const survivors = ranked.slice(0, survivorCountForLayer(nextLayer));
+  // Layer 1 retains every sector that clears its score bar. Each later layer
+  // repeats that response-driven filter using only its latest interaction
+  // data; Layer 10 receives one deterministic capstone sector.
+  const survivors = selectSyntheticSurvivors(ranked, session.current_layer);
   const nextSession = await updateLayerState(serviceClient, session.id, nextLayer, survivors);
   const preferences = asVisualPreferences(nextSession.visual_preferences);
   const nextTask = await createLayerTasks(serviceClient, nextSession, survivors, preferences);
