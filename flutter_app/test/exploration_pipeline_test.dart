@@ -1,9 +1,13 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mindbridge_app/features/exploration/models/exploration_models.dart';
 import 'package:mindbridge_app/features/exploration/models/visual_scene_spec.dart';
+import 'package:mindbridge_app/features/exploration/presentation/non_audio_mechanic_board.dart';
+import 'package:mindbridge_app/features/exploration/presentation/social_creative_interaction_board.dart';
+import 'package:mindbridge_app/features/exploration/presentation/spatial_temporal_interaction_board.dart';
 import 'package:mindbridge_app/features/exploration/services/capstone_router.dart';
 import 'package:mindbridge_app/features/exploration/services/deepening_task_factory.dart';
 import 'package:mindbridge_app/features/exploration/services/layer1_generator.dart';
+import 'package:mindbridge_app/features/exploration/services/layer1_catalog.dart';
 import 'package:mindbridge_app/features/exploration/services/play_routing_score_calculator.dart';
 import 'package:mindbridge_app/features/exploration/services/synthetic_demo_scene_mapper.dart';
 
@@ -44,6 +48,32 @@ void main() {
     }
   });
 
+  test('Layer 1 draft catalog has one theme-compatible reviewed-draft item per sector',
+      () {
+    final catalog = Layer1Catalog.all;
+    expect(catalog, hasLength(30));
+    expect(catalog.map((item) => item.verticalId).toSet(),
+        equals(PlayMechanic.values.map((mechanic) => mechanic.name).toSet()));
+    expect(catalog.every((item) => item.format.isNotEmpty), isTrue);
+    expect(catalog.every((item) => item.visualSpec.isNotEmpty), isTrue);
+    expect(Layer1ItemDraft.layerNumber, 1);
+    expect(Layer1ItemDraft.sourceType, 'curated_draft');
+    expect(Layer1ItemDraft.themeSkinCompatible, isTrue);
+    expect(Layer1ItemDraft.reviewStatus, 'draft_pending_review');
+  });
+
+  test('Layer 1 re-baseline samples eight prior strengths and seven fresh sectors',
+      () {
+    final previous = PlayMechanic.values.take(10).toList(growable: false);
+    final result = Layer1DomainSampler.rebaseline(
+      previousRanked: previous,
+      previouslyTested: previous,
+    );
+    expect(result, hasLength(15));
+    expect(result.take(8), equals(previous.take(8)));
+    expect(result.skip(8).every((mechanic) => !previous.contains(mechanic)), isTrue);
+  });
+
   test('local builder scenes keep all thirty mechanics visually distinct', () {
     final plans = PlayMechanic.values
         .map(VisualPuzzlePlan.localForMechanic)
@@ -72,6 +102,35 @@ void main() {
       expect(scene.puzzlePlan?.rule, plan.rule);
       expect(scene.sceneType, plan.kind.wireName);
     }
+  });
+
+  test('dedicated direct-manipulation boards cover every non-audio Layer 1 sector',
+      () {
+    const audioOnly = {
+      PlayMechanic.phonologicalPatternRecognition,
+      PlayMechanic.auditorySequenceRecall,
+      PlayMechanic.musicalPatternRecognition,
+    };
+    final nonAudio = PlayMechanic.values
+        .where((mechanic) => !audioOnly.contains(mechanic));
+
+    for (final mechanic in nonAudio) {
+      final task = PuzzleSpec(
+        id: 'coverage_${mechanic.name}',
+        mechanics: [mechanic],
+        layer: 1,
+        themedPrompt: '',
+        options: const ['a', 'b', 'c'],
+        correctOption: 'b',
+        itemCount: 3,
+      );
+      final hasDedicatedBoard = SpatialTemporalInteractionBoard.supports(task) ||
+          NonAudioMechanicBoard.supports(task) ||
+          SocialCreativeInteractionBoard.supports(mechanic);
+      expect(hasDedicatedBoard, isTrue,
+          reason: '${mechanic.name} needs its own non-audio interaction board.');
+    }
+    expect(nonAudio, hasLength(27));
   });
 
   test('builder Layer 1 contains one shuffled, themed task for every mechanic',

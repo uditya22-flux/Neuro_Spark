@@ -49,4 +49,50 @@ void main() {
 
     expect(choices, ['Blue bay', 'Gold bay']);
   });
+
+  testWidgets('every non-audio Layer 1 mechanic mounts its direct interaction surface',
+      (tester) async {
+    const audioOnly = {
+      PlayMechanic.phonologicalPatternRecognition,
+      PlayMechanic.auditorySequenceRecall,
+      PlayMechanic.musicalPatternRecognition,
+    };
+
+    for (final mechanic in PlayMechanic.values.where(
+      (mechanic) => !audioOnly.contains(mechanic),
+    )) {
+      final mechanicTask = PuzzleSpec(
+        id: 'direct-board-${mechanic.name}',
+        mechanics: [mechanic],
+        layer: 1,
+        themedPrompt: '',
+        options: const ['blue', 'gold', 'green', 'silver'],
+        correctOption: 'gold',
+        itemCount: 3,
+      );
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: SizedBox(
+              width: 600,
+              height: 720,
+              child: AmbientPlayBoard(
+                task: mechanicTask,
+                scene: null,
+                highlightTarget: false,
+                onChoice: (_) async => true,
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+      expect(
+        tester.takeException(),
+        isNull,
+        reason: '${mechanic.name} direct interaction surface did not mount.',
+      );
+    }
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
 }

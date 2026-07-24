@@ -7,6 +7,9 @@ import 'package:flutter/services.dart';
 import '../models/exploration_models.dart';
 import '../models/visual_scene_spec.dart';
 import '../services/synthetic_demo_scene_mapper.dart';
+import 'non_audio_mechanic_board.dart';
+import 'social_creative_interaction_board.dart';
+import 'spatial_temporal_interaction_board.dart';
 
 /// A deliberately word-free play surface. The top motif is the visual goal;
 /// children respond by touching the matching picture below. No score, timer,
@@ -69,6 +72,30 @@ class _AmbientPlayBoardState extends State<AmbientPlayBoard> {
   @override
   Widget build(BuildContext context) {
     final task = widget.task;
+    final singleMechanic =
+        task.mechanics.length == 1 ? task.mechanics.single : null;
+    if (SpatialTemporalInteractionBoard.supports(task)) {
+      return SpatialTemporalInteractionBoard(
+        task: task,
+        highlightTarget: widget.highlightTarget,
+        onChoice: widget.onChoice,
+      );
+    }
+    if (NonAudioMechanicBoard.supports(task)) {
+      return NonAudioMechanicBoard(
+        task: task,
+        highlightTarget: widget.highlightTarget,
+        onChoice: widget.onChoice,
+      );
+    }
+    if (singleMechanic != null &&
+        SocialCreativeInteractionBoard.supports(singleMechanic)) {
+      return SocialCreativeInteractionBoard(
+        task: task,
+        highlightTarget: widget.highlightTarget,
+        onChoice: widget.onChoice,
+      );
+    }
     final scene = widget.scene;
     final options = _visibleOptions(task, scene?.itemCount ?? task.itemCount);
     final targetIndex = max(0, options.indexOf(task.correctOption));
