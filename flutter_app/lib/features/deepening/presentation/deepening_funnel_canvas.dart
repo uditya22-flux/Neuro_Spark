@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -23,10 +24,12 @@ class DeepeningFunnelCanvas extends ConsumerStatefulWidget {
   final String userId;
   final VoidCallback onCompleted;
 
-  const DeepeningFunnelCanvas({super.key, required this.userId, required this.onCompleted});
+  const DeepeningFunnelCanvas(
+      {super.key, required this.userId, required this.onCompleted});
 
   @override
-  ConsumerState<DeepeningFunnelCanvas> createState() => _DeepeningFunnelCanvasState();
+  ConsumerState<DeepeningFunnelCanvas> createState() =>
+      _DeepeningFunnelCanvasState();
 }
 
 class _DeepeningFunnelCanvasState extends ConsumerState<DeepeningFunnelCanvas> {
@@ -39,7 +42,8 @@ class _DeepeningFunnelCanvasState extends ConsumerState<DeepeningFunnelCanvas> {
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => ref.read(explorationFunnelProvider.notifier).start());
+    WidgetsBinding.instance.addPostFrameCallback(
+        (_) => ref.read(explorationFunnelProvider.notifier).start());
   }
 
   void _syncTracker(PuzzleSpec task) {
@@ -80,7 +84,8 @@ class _DeepeningFunnelCanvasState extends ConsumerState<DeepeningFunnelCanvas> {
     final controller = ref.read(explorationFunnelProvider.notifier);
     final telemetry = tracker.finish();
     if (state.usesSyntheticCloud) {
-      final result = await controller.skipSyntheticCloudTask(telemetry: telemetry);
+      final result =
+          await controller.skipSyntheticCloudTask(telemetry: telemetry);
       if (!mounted || result != SyntheticCloudChoiceResult.unavailable) return;
       _autoAdvanceInProgress = false;
       tracker.resume();
@@ -100,113 +105,206 @@ class _DeepeningFunnelCanvasState extends ConsumerState<DeepeningFunnelCanvas> {
       if (!_reportedCapstone) {
         _reportedCapstone = true;
         WidgetsBinding.instance.addPostFrameCallback((_) {
-          final preference = ref.read(intakeProvider).configuration?.sandboxPreference ?? SandboxPreference.calendar;
+          final preference =
+              ref.read(intakeProvider).configuration?.sandboxPreference ??
+                  SandboxPreference.calendar;
           final vertical = adaptiveFunnelDemoMode
               ? state.finalMechanic == null
                   ? null
-                  : CapstoneRouter.verticalIdForPlayMechanic(state.finalMechanic!)
+                  : CapstoneRouter.verticalIdForPlayMechanic(
+                      state.finalMechanic!)
               : CapstoneRouter.verticalIdFor(preference);
           widget.onCompleted();
-          context.go(vertical == null ? '/exploring' : '/sandbox?vertical=$vertical');
+          context.go(
+              vertical == null ? '/exploring' : '/sandbox?vertical=$vertical');
         });
       }
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
-    if (task == null) return Scaffold(body: Center(child: Text(state.error ?? 'Preparing play...')));
+    if (task == null) {
+      return Scaffold(
+          body: Center(child: Text(state.error ?? 'Preparing play...')));
+    }
 
     _syncTracker(task);
-    if (state.support.timerPaused) _tracker?.pause();
+    if (state.support.timerPaused) {
+      _tracker?.pause();
+    }
     final intake = ref.watch(intakeProvider).configuration;
     final visualScene = state.usesSyntheticCloud
         ? state.syntheticCloudScene
         : intake == null
             ? null
-            : ref.watch(
-                visualSceneProvider(
-                  VisualSceneRequest(
-                    childId: intake.childId,
-                    layer: task.layer,
-                    taskId: task.id,
-                    mechanic: task.mechanics.length == 1
-                        ? task.mechanics.single
-                        : PlayMechanic.visualPatternCompletion,
-                    itemCount: task.itemCount,
-                    syntheticDemoWorld: intake.syntheticDemoWorld,
-                    familiarColors: intake.familiarColors.toList(growable: false),
-                    visualStylePreference: intake.visualStylePreference,
-                    motionAllowed: intake.interface.allowMotion,
+            : ref
+                .watch(
+                  visualSceneProvider(
+                    VisualSceneRequest(
+                      childId: intake.childId,
+                      layer: task.layer,
+                      taskId: task.id,
+                      mechanic: task.mechanics.length == 1
+                          ? task.mechanics.single
+                          : PlayMechanic.visualPatternCompletion,
+                      itemCount: task.itemCount,
+                      syntheticDemoWorld: intake.syntheticDemoWorld,
+                      familiarColors:
+                          intake.familiarColors.toList(growable: false),
+                      visualStylePreference: intake.visualStylePreference,
+                      motionAllowed: intake.interface.allowMotion,
+                    ),
                   ),
-                ),
-              ).valueOrNull;
+                )
+                .valueOrNull;
     return Scaffold(
       body: SafeArea(
-        child: Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 720),
-            child: Padding(
-              padding: const EdgeInsets.all(20),
-              child: SensoryGlassSurface(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    if (showcaseDebugOverlay)
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
-                        child: _ShowcaseDebugReadout(
+        child: Stack(
+          children: [
+            Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 720),
+                child: Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: SensoryGlassSurface(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        if (showcaseDebugOverlay)
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
+                            child: _ShowcaseDebugReadout(
+                              task: task,
+                              activeMechanics: state.activeMechanics,
+                            ),
+                          ),
+                        if (task.showsDistractors)
+                          const Padding(
+                            padding: EdgeInsets.only(top: 12),
+                            child: _QuietDistractorMarkers(),
+                          ),
+                        AmbientPlayBoard(
                           task: task,
-                          activeMechanics: state.activeMechanics,
+                          scene: visualScene,
+                          highlightTarget: state.support.highlightTarget,
+                          onInteraction: () =>
+                              _noteInteraction(task, controller),
+                          onChoice: (option) async {
+                            _noteInteraction(task, controller);
+                            if (state.usesSyntheticCloud) {
+                              final outcome = await controller
+                                  .submitSyntheticCloudSelection(
+                                optionId: option,
+                                telemetry: _tracker!
+                                    .snapshot(includePendingInteraction: true),
+                              );
+                              if (outcome ==
+                                  SyntheticCloudChoiceResult.unavailable) {
+                                return false;
+                              }
+                              if (outcome ==
+                                  SyntheticCloudChoiceResult.softMiss) {
+                                _tracker!.recordSoftMiss();
+                                return false;
+                              }
+                              if (outcome ==
+                                  SyntheticCloudChoiceResult.solved) {
+                                _tracker!.recordCorrectChoice();
+                              } else {
+                                _tracker!.recordSoftMiss();
+                              }
+                              return true;
+                            }
+                            final isCorrect = option == task.correctOption;
+                            if (isCorrect) {
+                              _tracker!.recordCorrectChoice();
+                            } else {
+                              _tracker!.recordSoftMiss();
+                            }
+                            controller.completeCurrentTask(_tracker!.finish());
+                            return true;
+                          },
                         ),
-                      ),
-                    if (task.showsDistractors) const Padding(
-                      padding: EdgeInsets.only(top: 12),
-                      child: _QuietDistractorMarkers(),
+                      ],
                     ),
-                    AmbientPlayBoard(
-                      task: task,
-                      scene: visualScene,
-                      highlightTarget: state.support.highlightTarget,
-                      onInteraction: () => _noteInteraction(task, controller),
-                      onChoice: (option) async {
-                        _noteInteraction(task, controller);
-                        if (state.usesSyntheticCloud) {
-                          final outcome = await controller.submitSyntheticCloudSelection(
-                            optionId: option,
-                            telemetry: _tracker!.snapshot(includePendingInteraction: true),
-                          );
-                          if (outcome == SyntheticCloudChoiceResult.unavailable) {
-                            return false;
-                          }
-                          if (outcome == SyntheticCloudChoiceResult.softMiss) {
-                            _tracker!.recordSoftMiss();
-                            return false;
-                          }
-                          if (outcome == SyntheticCloudChoiceResult.solved) {
-                            _tracker!.recordCorrectChoice();
-                          } else {
-                            _tracker!.recordSoftMiss();
-                          }
-                          return true;
-                        }
-                        final isCorrect = option == task.correctOption;
-                        if (isCorrect) {
-                          _tracker!.recordCorrectChoice();
-                        } else {
-                          _tracker!.recordSoftMiss();
-                        }
-                        controller.completeCurrentTask(_tracker!.finish());
-                        return true;
-                      },
-                    ),
-                  ],
+                  ),
                 ),
               ),
             ),
-          ),
+            if (syntheticCloudDemoMode && state.syntheticCloudSessionId != null)
+              Positioned(
+                top: 4,
+                right: 4,
+                child: Semantics(
+                  label: 'Open guardian live-view session code',
+                  button: true,
+                  child: IconButton.filledTonal(
+                    icon: const Icon(Icons.family_restroom_outlined),
+                    tooltip: 'Guardian live view',
+                    onPressed: () => _showGuardianSessionCode(
+                      state.syntheticCloudSessionId!,
+                    ),
+                  ),
+                ),
+              ),
+          ],
         ),
       ),
     );
   }
+
+  Future<void> _showGuardianSessionCode(String sessionId) => showDialog<void>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Guardian live view'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'For this fictional demo session, enter this temporary code in the guardian portal on the other phone.',
+              ),
+              const SizedBox(height: 16),
+              SelectableText(
+                sessionId,
+                style: const TextStyle(
+                  fontFamily: 'monospace',
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 12),
+              const Text(
+                'This code expires with the synthetic session and is not a production access method.',
+                style: TextStyle(fontSize: 12),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton.icon(
+              onPressed: () async {
+                await Clipboard.setData(ClipboardData(text: sessionId));
+                if (mounted) {
+                  ScaffoldMessenger.of(this.context).showSnackBar(
+                    const SnackBar(content: Text('Demo session code copied.')),
+                  );
+                }
+              },
+              icon: const Icon(Icons.copy_outlined),
+              label: const Text('Copy code'),
+            ),
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+                this.context.go('/guardian-portal?code=$sessionId');
+              },
+              child: const Text('Open portal'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Done'),
+            ),
+          ],
+        ),
+      );
 
   @override
   void dispose() {
@@ -265,7 +363,8 @@ class _ShowcaseDebugReadout extends StatelessWidget {
     final label = mechanic?.label ?? 'visual play';
     final group = mechanic?.group.label ?? 'word-free play';
     return Semantics(
-      label: 'Showcase debug: Layer ${task.layer}, sector $position of $total, $group, $label',
+      label:
+          'Showcase debug: Layer ${task.layer}, sector $position of $total, $group, $label',
       child: DecoratedBox(
         decoration: BoxDecoration(
           color: const Color(0xff1c2b3d).withValues(alpha: .92),

@@ -20,7 +20,7 @@ create table if not exists public.synthetic_engine2_demo_sessions (
     check (jsonb_typeof(visual_preferences) = 'object'),
   final_sector text,
   final_sandbox text check (final_sandbox in ('calendar', 'constellation', 'exploring')),
-  expires_at timestamptz not null default (timezone('utc', now()) + interval '3 hours'),
+  expires_at timestamptz not null default (timezone('utc', now()) + interval '24 hours'),
   created_at timestamptz not null default timezone('utc', now()),
   updated_at timestamptz not null default timezone('utc', now()),
   check ((status <> 'complete') or final_sector is not null),

@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../../core/auth/synthetic_demo_auth.dart';
 import '../../../core/config/prototype_mode.dart';
 import '../models/exploration_models.dart';
 import '../models/synthetic_engine2_models.dart';
@@ -73,29 +74,36 @@ class SyntheticEngine2Service {
     } catch (_) {
       return SyntheticEngine2Result.unavailable('Supabase is not initialized.');
     }
-    if (client.auth.currentSession == null) {
-      return SyntheticEngine2Result.unavailable('A synthetic session is not available.');
+    if (!await SyntheticDemoAuth.ensureAnonymousSession(client)) {
+      return SyntheticEngine2Result.unavailable(
+        'The demo could not start its anonymous Supabase session. Check that Anonymous Sign-Ins are enabled, then reopen the app.',
+      );
     }
 
     try {
       final response = await client.functions.invoke(_functionName, body: body);
       if (response.status >= 400 || response.data is! Map) {
-        return SyntheticEngine2Result.unavailable('Synthetic Engine 2 is temporarily unavailable.');
+        return SyntheticEngine2Result.unavailable(
+            'Synthetic Engine 2 is temporarily unavailable.');
       }
       return SyntheticEngine2Result.fromJson(
         Map<String, dynamic>.from(response.data as Map),
       );
     } on FunctionException {
-      return SyntheticEngine2Result.unavailable('Synthetic Engine 2 is temporarily unavailable.');
+      return SyntheticEngine2Result.unavailable(
+          'Synthetic Engine 2 is temporarily unavailable.');
     } catch (error) {
       // Do not log request data: even synthetic mode should keep telemetry
       // aggregates out of device logs.
-      debugPrint('[SyntheticEngine2Service] next task unavailable: ${error.runtimeType}');
-      return SyntheticEngine2Result.unavailable('Synthetic Engine 2 is temporarily unavailable.');
+      debugPrint(
+          '[SyntheticEngine2Service] next task unavailable: ${error.runtimeType}');
+      return SyntheticEngine2Result.unavailable(
+          'Synthetic Engine 2 is temporarily unavailable.');
     }
   }
 
-  SyntheticEngine2Result _disabledResult() => SyntheticEngine2Result.unavailable(
+  SyntheticEngine2Result _disabledResult() =>
+      SyntheticEngine2Result.unavailable(
         'Synthetic cloud Engine 2 is disabled in this build mode.',
       );
 }

@@ -1,4 +1,8 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Required for Supabase anonymous demo auth and the paired guardian
+         session snapshot. Without this, a release APK cannot reach Supabase
+         even when the project configuration is correct. -->
+    <uses-permission android:name="android.permission.INTERNET" />
     <application
         android:label="neurospark"
         android:name="${applicationName}"

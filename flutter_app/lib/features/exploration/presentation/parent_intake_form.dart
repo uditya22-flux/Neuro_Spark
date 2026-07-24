@@ -37,7 +37,8 @@ class _ParentIntakeFormState extends ConsumerState<ParentIntakeForm> {
   Set<KnownTrigger> _knownTriggers = <KnownTrigger>{};
   Set<FamiliarColor> _familiarColors = <FamiliarColor>{};
   VisualStylePreference _visualStyle = VisualStylePreference.illustratedObjects;
-  Set<AvoidableVisualElement> _avoidableVisualElements = <AvoidableVisualElement>{};
+  Set<AvoidableVisualElement> _avoidableVisualElements =
+      <AvoidableVisualElement>{};
   SyntheticDemoWorld _syntheticDemoWorld = SyntheticDemoWorld.vehicles;
   bool _creatingChild = false;
 
@@ -46,7 +47,9 @@ class _ParentIntakeFormState extends ConsumerState<ParentIntakeForm> {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       await ref.read(intakeProvider.notifier).loadChildProfiles();
-      if (mounted) _applyStoredConfiguration(ref.read(intakeProvider).configuration);
+      if (mounted) {
+        _applyStoredConfiguration(ref.read(intakeProvider).configuration);
+      }
     });
   }
 
@@ -104,7 +107,9 @@ class _ParentIntakeFormState extends ConsumerState<ParentIntakeForm> {
 
   Future<void> _selectChild(String childId) async {
     await ref.read(intakeProvider.notifier).selectChild(childId);
-    if (mounted) _applyStoredConfiguration(ref.read(intakeProvider).configuration);
+    if (mounted) {
+      _applyStoredConfiguration(ref.read(intakeProvider).configuration);
+    }
   }
 
   void _refreshSyntheticDemoWorld() {
@@ -123,9 +128,14 @@ class _ParentIntakeFormState extends ConsumerState<ParentIntakeForm> {
     final name = _childName.text.trim();
     final birthYear = int.tryParse(_birthYear.text.trim());
     final currentYear = DateTime.now().year;
-    if (name.isEmpty || birthYear == null || birthYear < currentYear - 12 || birthYear > currentYear - 7) {
+    if (name.isEmpty ||
+        birthYear == null ||
+        birthYear < currentYear - 12 ||
+        birthYear > currentYear - 7) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Enter a name and a birth year for a child aged 7–12.')),
+        const SnackBar(
+            content:
+                Text('Enter a name and a birth year for a child aged 7–12.')),
       );
       return;
     }
@@ -155,7 +165,8 @@ class _ParentIntakeFormState extends ConsumerState<ParentIntakeForm> {
     final childId = ref.read(intakeProvider).selectedChildId;
     if (childId == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Choose or create a child profile first.')),
+        const SnackBar(
+            content: Text('Choose or create a child profile first.')),
       );
       return;
     }
@@ -199,7 +210,20 @@ class _ParentIntakeFormState extends ConsumerState<ParentIntakeForm> {
     final busy = state.isSaving || state.isLoadingChildren || _creatingChild;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Guardian preferences'), centerTitle: true),
+      appBar: AppBar(
+        title: const Text('Guardian preferences'),
+        centerTitle: true,
+        actions: [
+          if (syntheticCloudDemoMode &&
+              !builderShowcaseMode &&
+              !localPrototypeMode)
+            IconButton(
+              tooltip: 'Open guardian live view',
+              icon: const Icon(Icons.insights_outlined),
+              onPressed: () => context.go('/guardian-portal'),
+            ),
+        ],
+      ),
       body: SafeArea(
         child: Center(
           child: ConstrainedBox(
@@ -211,9 +235,11 @@ class _ParentIntakeFormState extends ConsumerState<ParentIntakeForm> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('Set up a comfortable exploration space.', style: Theme.of(context).textTheme.titleLarge),
+                    Text('Set up a comfortable exploration space.',
+                        style: Theme.of(context).textTheme.titleLarge),
                     const SizedBox(height: 8),
-                    const Text('These are guardian-stated support preferences. They are not a diagnosis or score.'),
+                    const Text(
+                        'These are guardian-stated support preferences. They are not a diagnosis or score.'),
                     if (state.error != null) ...[
                       const SizedBox(height: 16),
                       _MessageCard(message: state.error!),
@@ -221,51 +247,60 @@ class _ParentIntakeFormState extends ConsumerState<ParentIntakeForm> {
                     const SizedBox(height: 24),
                     if (presentationDemoMode) ...[
                       _sectionTitle(context, 'Child preferences'),
-                      const Text('The preferences below set up a comfortable exploration space for this session.'),
+                      const Text(
+                          'The preferences below set up a comfortable exploration space for this session.'),
                     ] else ...[
-                    _sectionTitle(context, 'Child profile'),
-                    DropdownButtonFormField<String>(
-                      key: ValueKey('child-${state.selectedChildId}-${state.childProfiles.length}'),
-                      initialValue: state.selectedChildId,
-                      decoration: const InputDecoration(labelText: 'Choose a child profile'),
-                      items: state.childProfiles
-                          .map((child) => DropdownMenuItem(
-                                value: child.id,
-                                child: Text('${child.preferredName} (${child.birthYear})'),
-                              ))
-                          .toList(),
-                      onChanged: busy ? null : (id) => id == null ? null : _selectChild(id),
-                    ),
-                    const SizedBox(height: 12),
-                    Text('Or add a child aged 7–12', style: Theme.of(context).textTheme.titleSmall),
-                    const SizedBox(height: 8),
-                    Row(
-                      children: [
-                        Expanded(
-                          flex: 2,
-                          child: TextField(
-                            controller: _childName,
-                            enabled: !busy,
-                            decoration: const InputDecoration(labelText: 'Preferred name'),
+                      _sectionTitle(context, 'Child profile'),
+                      DropdownButtonFormField<String>(
+                        key: ValueKey(
+                            'child-${state.selectedChildId}-${state.childProfiles.length}'),
+                        initialValue: state.selectedChildId,
+                        decoration: const InputDecoration(
+                            labelText: 'Choose a child profile'),
+                        items: state.childProfiles
+                            .map((child) => DropdownMenuItem(
+                                  value: child.id,
+                                  child: Text(
+                                      '${child.preferredName} (${child.birthYear})'),
+                                ))
+                            .toList(),
+                        onChanged: busy
+                            ? null
+                            : (id) => id == null ? null : _selectChild(id),
+                      ),
+                      const SizedBox(height: 12),
+                      Text('Or add a child aged 7–12',
+                          style: Theme.of(context).textTheme.titleSmall),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          Expanded(
+                            flex: 2,
+                            child: TextField(
+                              controller: _childName,
+                              enabled: !busy,
+                              decoration: const InputDecoration(
+                                  labelText: 'Preferred name'),
+                            ),
                           ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: TextField(
-                            controller: _birthYear,
-                            enabled: !busy,
-                            keyboardType: TextInputType.number,
-                            decoration: const InputDecoration(labelText: 'Birth year'),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: TextField(
+                              controller: _birthYear,
+                              enabled: !busy,
+                              keyboardType: TextInputType.number,
+                              decoration: const InputDecoration(
+                                  labelText: 'Birth year'),
+                            ),
                           ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    OutlinedButton.icon(
-                      onPressed: busy ? null : _createChildProfile,
-                      icon: const Icon(Icons.person_add_outlined),
-                      label: const Text('Add child profile'),
-                    ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      OutlinedButton.icon(
+                        onPressed: busy ? null : _createChildProfile,
+                        icon: const Icon(Icons.person_add_outlined),
+                        label: const Text('Add child profile'),
+                      ),
                     ],
                     const SizedBox(height: 28),
                     _sectionTitle(context, 'Sound and visuals'),
@@ -275,38 +310,54 @@ class _ParentIntakeFormState extends ConsumerState<ParentIntakeForm> {
                       min: 0,
                       max: 100,
                       divisions: 10,
-                      onChanged: busy ? null : (value) => setState(() => _audioLimit = value),
+                      onChanged: busy
+                          ? null
+                          : (value) => setState(() => _audioLimit = value),
                     ),
                     DropdownButtonFormField<AudioFeedbackPreference>(
                       key: ValueKey('audio-feedback-${_audioFeedback.name}'),
                       initialValue: _audioFeedback,
-                      decoration: const InputDecoration(labelText: 'Preferred feedback'),
+                      decoration: const InputDecoration(
+                          labelText: 'Preferred feedback'),
                       items: AudioFeedbackPreference.values
-                          .map((value) => DropdownMenuItem(value: value, child: Text(value.label)))
+                          .map((value) => DropdownMenuItem(
+                              value: value, child: Text(value.label)))
                           .toList(),
-                      onChanged: busy ? null : (value) => setState(() => _audioFeedback = value!),
+                      onChanged: busy
+                          ? null
+                          : (value) => setState(() => _audioFeedback = value!),
                     ),
                     const SizedBox(height: 12),
                     DropdownButtonFormField<VisualClutterTolerance>(
                       key: ValueKey('visual-clutter-${_clutter.name}'),
                       initialValue: _clutter,
-                      decoration: const InputDecoration(labelText: 'Visual-clutter tolerance'),
+                      decoration: const InputDecoration(
+                          labelText: 'Visual-clutter tolerance'),
                       items: VisualClutterTolerance.values
-                          .map((value) => DropdownMenuItem(value: value, child: Text('${value.name[0].toUpperCase()}${value.name.substring(1)} tolerance')))
+                          .map((value) => DropdownMenuItem(
+                              value: value,
+                              child: Text(
+                                  '${value.name[0].toUpperCase()}${value.name.substring(1)} tolerance')))
                           .toList(),
-                      onChanged: busy ? null : (value) => setState(() => _clutter = value!),
+                      onChanged: busy
+                          ? null
+                          : (value) => setState(() => _clutter = value!),
                     ),
                     const SizedBox(height: 12),
                     _toleranceField(
                       label: 'Brightness tolerance',
                       value: _brightness,
-                      onChanged: busy ? null : (value) => setState(() => _brightness = value!),
+                      onChanged: busy
+                          ? null
+                          : (value) => setState(() => _brightness = value!),
                     ),
                     const SizedBox(height: 12),
                     _toleranceField(
                       label: 'Movement and animation tolerance',
                       value: _motion,
-                      onChanged: busy ? null : (value) => setState(() => _motion = value!),
+                      onChanged: busy
+                          ? null
+                          : (value) => setState(() => _motion = value!),
                     ),
                     const SizedBox(height: 28),
                     _sectionTitle(context, 'Interaction and communication'),
@@ -319,29 +370,41 @@ class _ParentIntakeFormState extends ConsumerState<ParentIntakeForm> {
                           .map((value) => ChoiceChip(
                                 label: Text(value.label),
                                 selected: _interaction == value,
-                                onSelected: busy ? null : (_) => setState(() => _interaction = value),
+                                onSelected: busy
+                                    ? null
+                                    : (_) =>
+                                        setState(() => _interaction = value),
                               ))
                           .toList(),
                     ),
                     const SizedBox(height: 12),
                     SwitchListTile.adaptive(
                       contentPadding: EdgeInsets.zero,
-                      title: const Text('Visual repetition is calming or helpful'),
+                      title:
+                          const Text('Visual repetition is calming or helpful'),
                       value: _visualRepetitionHelpful,
-                      onChanged: busy ? null : (value) => setState(() => _visualRepetitionHelpful = value),
+                      onChanged: busy
+                          ? null
+                          : (value) =>
+                              setState(() => _visualRepetitionHelpful = value),
                     ),
                     DropdownButtonFormField<CommunicationPreference>(
                       key: ValueKey('communication-${_communication.name}'),
                       initialValue: _communication,
-                      decoration: const InputDecoration(labelText: 'Helpful communication style'),
+                      decoration: const InputDecoration(
+                          labelText: 'Helpful communication style'),
                       items: CommunicationPreference.values
-                          .map((value) => DropdownMenuItem(value: value, child: Text(value.label)))
+                          .map((value) => DropdownMenuItem(
+                              value: value, child: Text(value.label)))
                           .toList(),
-                      onChanged: busy ? null : (value) => setState(() => _communication = value!),
+                      onChanged: busy
+                          ? null
+                          : (value) => setState(() => _communication = value!),
                     ),
                     const SizedBox(height: 28),
                     _sectionTitle(context, 'Avoidable triggers'),
-                    const Text('Select anything the play experience should avoid when possible.'),
+                    const Text(
+                        'Select anything the play experience should avoid when possible.'),
                     const SizedBox(height: 8),
                     Wrap(
                       spacing: 8,
@@ -369,11 +432,14 @@ class _ParentIntakeFormState extends ConsumerState<ParentIntakeForm> {
                       enabled: !busy,
                       onChanged: (_) => _refreshSyntheticDemoWorld(),
                       decoration: const InputDecoration(
-                        labelText: 'Favourite theme or current intense interest',
-                        hintText: 'For example: trains, planets, or plumbing systems',
+                        labelText:
+                            'Favourite theme or current intense interest',
+                        hintText:
+                            'For example: trains, planets, or plumbing systems',
                       ),
                       maxLength: 80,
-                      validator: (value) => presentationDemoMode || (value != null && value.trim().isNotEmpty)
+                      validator: (value) => presentationDemoMode ||
+                              (value != null && value.trim().isNotEmpty)
                           ? null
                           : 'Enter a theme to personalise play.',
                     ),
@@ -389,7 +455,8 @@ class _ParentIntakeFormState extends ConsumerState<ParentIntakeForm> {
                       onChanged: (_) => _refreshSyntheticDemoWorld(),
                       decoration: const InputDecoration(
                         labelText: 'Favourite toys, objects, or pictures',
-                        hintText: 'For example: red cars, buses, dinosaurs, building tools',
+                        hintText:
+                            'For example: red cars, buses, dinosaurs, building tools',
                       ),
                       maxLength: 120,
                     ),
@@ -400,7 +467,8 @@ class _ParentIntakeFormState extends ConsumerState<ParentIntakeForm> {
                       onChanged: (_) => _refreshSyntheticDemoWorld(),
                       decoration: const InputDecoration(
                         labelText: 'Familiar places or scenes',
-                        hintText: 'For example: roads, garage, garden, night sky',
+                        hintText:
+                            'For example: roads, garage, garden, night sky',
                       ),
                       maxLength: 100,
                     ),
@@ -430,11 +498,15 @@ class _ParentIntakeFormState extends ConsumerState<ParentIntakeForm> {
                     DropdownButtonFormField<VisualStylePreference>(
                       key: ValueKey('visual-style-${_visualStyle.name}'),
                       initialValue: _visualStyle,
-                      decoration: const InputDecoration(labelText: 'Picture style that feels most familiar'),
+                      decoration: const InputDecoration(
+                          labelText: 'Picture style that feels most familiar'),
                       items: VisualStylePreference.values
-                          .map((style) => DropdownMenuItem(value: style, child: Text(style.label)))
+                          .map((style) => DropdownMenuItem(
+                              value: style, child: Text(style.label)))
                           .toList(),
-                      onChanged: busy ? null : (value) => setState(() => _visualStyle = value!),
+                      onChanged: busy
+                          ? null
+                          : (value) => setState(() => _visualStyle = value!),
                     ),
                     const SizedBox(height: 16),
                     const Text('Pictures to leave out when possible'),
@@ -445,14 +517,17 @@ class _ParentIntakeFormState extends ConsumerState<ParentIntakeForm> {
                       children: AvoidableVisualElement.values
                           .map((element) => FilterChip(
                                 label: Text(element.label),
-                                selected: _avoidableVisualElements.contains(element),
+                                selected:
+                                    _avoidableVisualElements.contains(element),
                                 onSelected: busy
                                     ? null
                                     : (selected) => setState(() {
                                           if (selected) {
-                                            _avoidableVisualElements.add(element);
+                                            _avoidableVisualElements
+                                                .add(element);
                                           } else {
-                                            _avoidableVisualElements.remove(element);
+                                            _avoidableVisualElements
+                                                .remove(element);
                                           }
                                         }),
                               ))
@@ -461,19 +536,29 @@ class _ParentIntakeFormState extends ConsumerState<ParentIntakeForm> {
                     DropdownButtonFormField<SandboxPreference>(
                       key: ValueKey('sandbox-${_sandboxPreference.name}'),
                       initialValue: _sandboxPreference,
-                      decoration: const InputDecoration(labelText: 'Choose an open-ended sandbox'),
+                      decoration: const InputDecoration(
+                          labelText: 'Choose an open-ended sandbox'),
                       items: const [
-                        DropdownMenuItem(value: SandboxPreference.calendar, child: Text('Timeline workshop')),
-                        DropdownMenuItem(value: SandboxPreference.constellation, child: Text('Constellation workshop')),
+                        DropdownMenuItem(
+                            value: SandboxPreference.calendar,
+                            child: Text('Timeline workshop')),
+                        DropdownMenuItem(
+                            value: SandboxPreference.constellation,
+                            child: Text('Constellation workshop')),
                       ],
-                      onChanged: busy ? null : (value) => setState(() => _sandboxPreference = value!),
+                      onChanged: busy
+                          ? null
+                          : (value) =>
+                              setState(() => _sandboxPreference = value!),
                     ),
                     const SizedBox(height: 28),
                     SizedBox(
                       width: double.infinity,
                       child: FilledButton(
                         onPressed: busy ? null : _submit,
-                        child: Text(busy ? 'Saving...' : 'Save preferences and start exploration'),
+                        child: Text(busy
+                            ? 'Saving...'
+                            : 'Save preferences and start exploration'),
                       ),
                     ),
                   ],
@@ -496,7 +581,8 @@ class _ParentIntakeFormState extends ConsumerState<ParentIntakeForm> {
         initialValue: value,
         decoration: InputDecoration(labelText: label),
         items: SensoryTolerance.values
-            .map((option) => DropdownMenuItem(value: option, child: Text(option.label)))
+            .map((option) =>
+                DropdownMenuItem(value: option, child: Text(option.label)))
             .toList(),
         onChanged: onChanged,
       );
@@ -520,6 +606,8 @@ class _MessageCard extends StatelessWidget {
           color: Theme.of(context).colorScheme.errorContainer,
           borderRadius: BorderRadius.circular(12),
         ),
-        child: Text(message, style: TextStyle(color: Theme.of(context).colorScheme.onErrorContainer)),
+        child: Text(message,
+            style: TextStyle(
+                color: Theme.of(context).colorScheme.onErrorContainer)),
       );
 }

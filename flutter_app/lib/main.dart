@@ -8,6 +8,7 @@ import 'core/services/firebase_service.dart';
 import 'core/services/notification_service.dart';
 import 'core/router/app_router.dart';
 import 'core/config/prototype_mode.dart';
+import 'core/auth/synthetic_demo_auth.dart';
 import 'features/exploration/providers/intake_provider.dart';
 
 Future<void> main() async {
@@ -24,12 +25,14 @@ Future<void> main() async {
   }
   const definedUrl = String.fromEnvironment('SUPABASE_URL');
   const definedAnonKey = String.fromEnvironment('SUPABASE_ANON_KEY');
-  final url = definedUrl.isNotEmpty ? definedUrl : dotenv.env['SUPABASE_URL']?.trim();
+  final url =
+      definedUrl.isNotEmpty ? definedUrl : dotenv.env['SUPABASE_URL']?.trim();
   final anonKey = definedAnonKey.isNotEmpty
       ? definedAnonKey
       : dotenv.env['SUPABASE_ANON_KEY']?.trim();
 
-  final hasSupabaseConfiguration = url != null && url.isNotEmpty && anonKey != null && anonKey.isNotEmpty;
+  final hasSupabaseConfiguration =
+      url != null && url.isNotEmpty && anonKey != null && anonKey.isNotEmpty;
   if (!hasSupabaseConfiguration && !builderShowcaseMode) {
     throw StateError(
       'Missing SUPABASE_URL or SUPABASE_ANON_KEY. Add them to flutter_app/.env.',
@@ -37,25 +40,14 @@ Future<void> main() async {
   }
 
   if (hasSupabaseConfiguration) {
-    await Supabase.initialize(url: url!, publishableKey: anonKey!);
+    await Supabase.initialize(url: url, publishableKey: anonKey);
   }
 
   // Synthetic showcase builds use a short-lived anonymous Supabase identity
   // solely to authorize the fixed-input demo scene function. If anonymous
   // auth is unavailable, the play UI still works with its local vector scene.
   if (syntheticDemoMode && hasSupabaseConfiguration) {
-    final auth = Supabase.instance.client.auth;
-    try {
-      // Synthetic cloud mode is deliberately authorized only by an anonymous
-      // demo identity. A leftover magic-link/email session from a prior run
-      // must not be reused because the server rejects non-anonymous users.
-      if (auth.currentUser?.isAnonymous != true) {
-        if (auth.currentSession != null) await auth.signOut();
-        await auth.signInAnonymously();
-      }
-    } catch (error) {
-      debugPrint('Synthetic demo anonymous sign-in unavailable: $error');
-    }
+    await SyntheticDemoAuth.ensureAnonymousSession(Supabase.instance.client);
   }
 
   // Firebase initialization has been skipped since FCM is charter-blocked and breaks web builds.
@@ -90,17 +82,18 @@ class NeuroSparkApp extends ConsumerWidget {
     return MaterialApp.router(
       title: 'NeuroSpark Accessibility App',
       debugShowCheckedModeBanner: false,
-      
+
       // 2. Swaps context colors instantly to dark high contrast theme if enabled
       theme: AppTheme.lightTheme.copyWith(
         colorScheme: AppTheme.lightTheme.colorScheme.copyWith(
           // Low visual-clutter preference deliberately reduces contrast.
-          primary: Color.lerp(AppTheme.lightPrimary, AppTheme.lightSurface, 1 - interface.contrastScale)!,
+          primary: Color.lerp(AppTheme.lightPrimary, AppTheme.lightSurface,
+              1 - interface.contrastScale)!,
         ),
       ),
       darkTheme: AppTheme.darkTheme,
       themeMode: safeMode.isEnabled ? ThemeMode.dark : ThemeMode.light,
-      
+
       routerConfig: router,
     );
   }

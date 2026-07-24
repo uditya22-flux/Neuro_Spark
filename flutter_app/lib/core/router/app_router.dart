@@ -6,6 +6,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../features/dashboard/widgets/dashboard_screen.dart';
 import '../../features/deepening/presentation/deepening_funnel_canvas.dart';
 import '../../features/exploration/presentation/exploration_continuing_screen.dart';
+import '../../features/guardian_demo/presentation/guardian_demo_portal_screen.dart';
 import '../../features/sandbox/presentation/engine4_sandbox_screen.dart';
 import '../auth/guardian_login_screen.dart';
 import '../config/prototype_mode.dart';
@@ -54,26 +55,36 @@ final routerProvider = Provider<GoRouter>((ref) {
   return GoRouter(
     initialLocation: !authStatus.hasCompletedIntake
         ? '/intake'
-        : (!authStatus.hasCompletedAssessment ? '/assessment-canvas' : '/dashboard'),
+        : (!authStatus.hasCompletedAssessment
+            ? '/assessment-canvas'
+            : '/dashboard'),
     redirect: (BuildContext context, GoRouterState state) {
+      final isGuardianDemoPortal = state.matchedLocation == '/guardian-portal';
       if (!authStatus.isLoggedIn) {
         return '/login';
       }
 
-      if (!authStatus.hasCompletedIntake && state.matchedLocation != '/intake') {
+      // The guardian companion view can be opened on a separate demo device
+      // before that device has gone through intake. It is still limited to an
+      // opaque, short-lived synthetic session code by its own Edge Function.
+      if (!authStatus.hasCompletedIntake &&
+          state.matchedLocation != '/intake' &&
+          !isGuardianDemoPortal) {
         return '/intake';
       }
 
       if (authStatus.hasCompletedIntake &&
           !authStatus.hasCompletedAssessment &&
-          state.matchedLocation != '/assessment-canvas') {
+          state.matchedLocation != '/assessment-canvas' &&
+          !isGuardianDemoPortal) {
         return '/assessment-canvas';
       }
 
       if (authStatus.hasCompletedAssessment &&
           state.matchedLocation != '/dashboard' &&
           state.matchedLocation != '/sandbox' &&
-          state.matchedLocation != '/exploring') {
+          state.matchedLocation != '/exploring' &&
+          !isGuardianDemoPortal) {
         return '/dashboard';
       }
 
@@ -96,6 +107,12 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/intake',
         builder: (context, state) => const ParentIntakeForm(),
+      ),
+      GoRoute(
+        path: '/guardian-portal',
+        builder: (context, state) => GuardianDemoPortalScreen(
+          initialSessionCode: state.uri.queryParameters['code'],
+        ),
       ),
       GoRoute(
         path: '/assessment-canvas',
@@ -123,8 +140,10 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: '/sandbox',
         builder: (context, state) {
           final userId = authStatus.activeChildId ?? authStatus.userId;
-          final vertical = state.uri.queryParameters['vertical'] ?? 'calendar_genius';
-          return Engine4SandboxScreen(userId: userId, initialVerticalId: vertical);
+          final vertical =
+              state.uri.queryParameters['vertical'] ?? 'calendar_genius';
+          return Engine4SandboxScreen(
+              userId: userId, initialVerticalId: vertical);
         },
       ),
       GoRoute(

@@ -88,3 +88,6 @@ verify_jwt = true
 
 [functions.synthetic-engine2-next-task]
 verify_jwt = true
+
+[functions.synthetic-engine2-guardian-portal]
+verify_jwt = true

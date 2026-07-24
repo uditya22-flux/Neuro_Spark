@@ -211,6 +211,13 @@ const layouts = ['leftToRight', 'grid', 'path'] as const;
 const animations = ['none', 'slide', 'roll', 'rotate', 'snap', 'gentlePulse'] as const;
 const optionIds = ['option_a', 'option_b', 'option_c', 'option_d', 'option_e'] as const;
 
+// The anonymous showcase can be resumed across a demo day, including from the
+// paired guardian-device view. It remains bounded by the database's existing
+// maximum lifetime constraint and is still synthetic-only.
+const syntheticDemoSessionLifetimeHours = 24;
+const syntheticDemoSessionLifetimeMs =
+  syntheticDemoSessionLifetimeHours * 60 * 60 * 1000;
+
 const sectorSet = new Set<string>(sectors);
 const sectorGroupSet = new Set<string>(sectorGroups);
 const worldSet = new Set<string>(worlds);
@@ -457,6 +464,7 @@ type SessionRow = {
   final_sector: string | null;
   final_sandbox: string | null;
   expires_at: string;
+  created_at: string;
 };
 
 type TaskRow = {
@@ -1235,6 +1243,38 @@ function clamp(value: number): number {
   return Math.max(0, Math.min(1, value));
 }
 
+function sessionExpiryFromCreatedAt(createdAt: string): string {
+  const createdAtMs = new Date(createdAt).getTime();
+  if (!Number.isFinite(createdAtMs)) {
+    throw new Error('Synthetic demo session has an invalid creation time.');
+  }
+  return new Date(createdAtMs + syntheticDemoSessionLifetimeMs).toISOString();
+}
+
+async function extendSyntheticDemoSessionLifetime(
+  serviceClient: { from: Function },
+  session: SessionRow,
+): Promise<SessionRow> {
+  const extendedExpiresAt = sessionExpiryFromCreatedAt(session.created_at);
+  if (new Date(session.expires_at).getTime() >= new Date(extendedExpiresAt).getTime()) {
+    return session;
+  }
+  const { data, error } = await serviceClient
+    .from('synthetic_engine2_demo_sessions')
+    .update({
+      expires_at: extendedExpiresAt,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', session.id)
+    .eq('status', 'in_progress')
+    .select('*')
+    .maybeSingle();
+  if (error || !data) {
+    throw new Error('Synthetic demo session lifetime could not be extended.');
+  }
+  return data as SessionRow;
+}
+
 async function getIssuedTask(
   serviceClient: { from: Function },
   sessionId: string,
@@ -1488,7 +1528,10 @@ async function startSession(
     .maybeSingle();
   if (currentError) throw new Error('Synthetic demo session could not be read.');
   if (current) {
-    const session = current as SessionRow;
+    const session = await extendSyntheticDemoSessionLifetime(
+      serviceClient,
+      current as SessionRow,
+    );
     if (sameVisualPreferences(asVisualPreferences(session.visual_preferences), preferences)) {
       if (!await sessionNeedsPuzzlePlanReset(serviceClient, session.id)) {
         const task = await issueNextQueuedTask(serviceClient, session);
@@ -1531,6 +1574,7 @@ async function startSession(
       visual_preferences: storedPreferences,
       active_sectors: [],
       pending_sectors: [],
+      expires_at: sessionExpiryFromCreatedAt(now),
     })
     .select('*')
     .maybeSingle();
