@@ -1,5 +1,26 @@
 project_id = "mindbridge"
 
+# Windows often blocks the default 5432x range (Hyper-V). Use 6432x locally.
+[api]
+port = 64321
+
+[db]
+port = 64332
+major_version = 17
+
+[studio]
+port = 64323
+
+[inbucket]
+port = 64324
+
+[auth]
+site_url = "http://127.0.0.1:64321"
+additional_redirect_urls = ["http://127.0.0.1:64321"]
+
+[analytics]
+enabled = false
+
 [functions.create-child]
 verify_jwt = true
 [functions.submit-intake]
@@ -37,4 +58,10 @@ verify_jwt = true
 [functions.deepening-progress]
 verify_jwt = true
 [functions.deepening-profile]
+verify_jwt = true
+[functions.strength-funnel-start]
+verify_jwt = true
+[functions.strength-funnel-submit-score]
+verify_jwt = true
+[functions.strength-funnel-generate-task]
 verify_jwt = true

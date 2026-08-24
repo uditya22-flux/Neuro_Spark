@@ -9,7 +9,7 @@ import {
   cleanupGuardian,
 } from './helpers.ts';
 
-const BASE = Deno.env.get('TEST_SUPABASE_URL') ?? 'http://127.0.0.1:54321';
+const BASE = Deno.env.get('TEST_SUPABASE_URL') ?? 'http://127.0.0.1:64321';
 
 async function submitIntake(
   token: string,

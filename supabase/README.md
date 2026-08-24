@@ -1,14 +1,41 @@
 # MindBridge Supabase backend
 
-This directory is the backend deployment boundary for the Supabase-only migration.
+## Hosted backend (all devices — default)
 
-1. Create a Supabase project and enable Email/Phone providers in Auth.
-2. Run `supabase db push` from this directory.
-3. Configure the Send SMS Auth Hook to call `sms-hook`; the function expects `MSG91_AUTH_KEY` and `MSG91_TEMPLATE_ID` secrets.
-4. Configure a Database Webhook on `pending_triggers` inserts to call `dispatch-fcm` with `{ "id": "{{ record.id }}" }`.
-5. Provide `FCM_PROJECT_ID` and a short-lived `FCM_ACCESS_TOKEN` to `dispatch-fcm` as secrets. The service-account credential must never ship to Flutter.
-6. Set `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, and provider secrets only as Edge Function secrets.
+Project **Mind_Bridge** is live at:
 
-The legacy `backend/` Express/Prisma service is not part of the production request path. New client reads/writes use Supabase Auth, Postgres/RLS, RPCs, Realtime, and Edge Functions. Firebase is limited to FCM transport; Firestore, Firebase Auth, Storage, Functions, Analytics, and Remote Config are not used.
+- **API:** https://zkskozozwjjzwvnkmeqb.supabase.co
+- **Dashboard:** https://supabase.com/dashboard/project/zkskozozwjjzwvnkmeqb
 
-The migration intentionally keeps adult notes and child experience in separate tables and policies. Never pass intake text, exports, secrets, or generated data to Graphify.
+Migrations and edge functions are deployed. The Flutter app defaults to this URL, so builds on **phone, tablet, and web** talk to the same cloud backend without extra config.
+
+```bash
+cd flutter_app && flutter run
+# or release builds:
+flutter build apk
+flutter build ios
+flutter build web
+```
+
+Guardians sign in on the login screen, then intake + strength funnel sync remotely.
+
+## Local dev (optional)
+
+Use this only when iterating against Docker on your machine:
+
+```bash
+bash scripts/start-backend.sh
+supabase functions serve
+cd flutter_app && flutter run --dart-define=USE_LOCAL_SUPABASE=true
+```
+
+Local mail OTP: http://127.0.0.1:64324
+
+## Production checklist
+
+1. Enable Email/Phone providers in Supabase Auth dashboard.
+2. Configure Send SMS Auth Hook → `sms-hook` (`MSG91_AUTH_KEY`, `MSG91_TEMPLATE_ID`).
+3. Database Webhook on `pending_triggers` inserts → `dispatch-fcm`.
+4. Set Edge Function secrets via `supabase secrets set`.
+
+The legacy `backend/` Express service is not used in production.

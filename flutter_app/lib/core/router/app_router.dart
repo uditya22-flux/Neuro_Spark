@@ -19,6 +19,8 @@ import '../../features/strength_funnel/providers/strength_funnel_controller.dart
 import '../../providers/intake_flow_provider.dart';
 
 import '../../screens/intake_flow_screen.dart';
+import '../../screens/login_screen.dart';
+import '../config/supabase_config.dart';
 
 import '../../services/intake_application_service.dart';
 
@@ -29,8 +31,9 @@ import '../../services/strength_funnel_progress_service.dart';
 import '../auth/auth_user_id.dart';
 
 AuthUserStatus _defaultAuthStatus() {
+  final offlineBeta = !SupabaseConfig.requiresAuth;
   return AuthUserStatus(
-    isLoggedIn: true,
+    isLoggedIn: offlineBeta,
     userId: resolveGuardianUserId(),
     hasCompletedIntake: false,
     hasCompletedStrengthFunnel: false,
@@ -111,9 +114,10 @@ final routerProvider = Provider<GoRouter>((ref) {
     redirect: (BuildContext context, GoRouterState state) {
 
       if (!authStatus.isLoggedIn) {
-
-        return '/login';
-
+        if (state.matchedLocation != '/login') {
+          return '/login';
+        }
+        return null;
       }
 
 
@@ -172,11 +176,7 @@ final routerProvider = Provider<GoRouter>((ref) {
 
         path: '/login',
 
-        builder: (context, state) => const Scaffold(
-
-          body: Center(child: Text('Login Screen')),
-
-        ),
+        builder: (context, state) => const LoginScreen(),
 
       ),
 
