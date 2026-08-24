@@ -103,11 +103,30 @@ export function buildTemplateJson(sample: SectorSample): Record<string, unknown>
   };
 }
 
-/** Layer 2+ adds a gentle specificity cue without increasing reading load. */
+/** Layer 2–5 adds specificity; layers 6–10 deepen present-moment focus. */
 export function layerAdjustedPrompt(sample: SectorSample, layer: number): string {
   if (layer <= 1) return sample.presentMomentPrompt;
+  if (layer >= 6) return deepDivePrompt(sample, layer);
   const base = sample.presentMomentPrompt.replace(/\?$/, "");
   return `${base} — thinking about ${sample.activityLabel.toLowerCase()}?`;
+}
+
+const DEEP_DIVE_CUES = [
+  "noticing this exact moment",
+  "the small details you like",
+  "staying with this activity",
+  "how absorbed you feel",
+  "your strongest spark right now",
+];
+
+export function deepDivePrompt(sample: SectorSample, layer: number): string {
+  const depthIndex = Math.min(Math.max(layer - 6, 0), DEEP_DIVE_CUES.length - 1);
+  const base = sample.presentMomentPrompt.replace(/\?$/, "");
+  return `${base} — ${DEEP_DIVE_CUES[depthIndex]}?`;
+}
+
+export function isDeepDiveLayer(layer: number): boolean {
+  return layer >= 6;
 }
 
 export function catalogTemplateForSector(

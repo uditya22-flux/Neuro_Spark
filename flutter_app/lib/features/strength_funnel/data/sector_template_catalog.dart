@@ -18,8 +18,22 @@ class SectorTemplateSample {
 
   String promptForLayer(int layer) {
     if (layer <= 1) return presentMomentPrompt;
+    if (layer >= 6) return _deepDivePrompt(layer);
     final base = presentMomentPrompt.replaceAll(RegExp(r'\?$'), '');
     return '$base — thinking about ${activityLabel.toLowerCase()}?';
+  }
+
+  String _deepDivePrompt(int layer) {
+    const cues = [
+      'noticing this exact moment',
+      'the small details you like',
+      'staying with this activity',
+      'how absorbed you feel',
+      'your strongest spark right now',
+    ];
+    final index = (layer - 6).clamp(0, cues.length - 1);
+    final base = presentMomentPrompt.replaceAll(RegExp(r'\?$'), '');
+    return '$base — ${cues[index]}?';
   }
 }
 

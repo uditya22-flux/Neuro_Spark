@@ -13,6 +13,7 @@ import '../../features/deepening/presentation/deepening_funnel_canvas.dart';
 import '../../features/sandbox/presentation/engine4_sandbox_screen.dart';
 
 import '../../features/strength_funnel/presentation/layer1_sector_prompt_widget.dart';
+import '../../features/strength_funnel/providers/strength_funnel_controller.dart';
 
 import '../../providers/intake_flow_provider.dart';
 
@@ -197,6 +198,8 @@ final routerProvider = Provider<GoRouter>((ref) {
           return StrengthFunnelScreen(
 
             onFunnelPhaseComplete: () async {
+
+              await ref.read(strengthFunnelControllerProvider.notifier).clearProgress();
 
               await ref.read(intakePersistenceServiceProvider).markStrengthFunnelComplete();
 

@@ -3,8 +3,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../data/strength_funnel_repository.dart';
 import '../../../providers/game_environment_provider.dart';
 import '../../../services/modality_router.dart';
+import '../../../services/strength_funnel_progress_service.dart';
 import '../data/strength_funnel_math.dart';
 import '../models/layer1_sector_task.dart';
+import '../models/strength_funnel_progress.dart';
 
 class StrengthFunnelState {
   const StrengthFunnelState({
@@ -21,6 +23,7 @@ class StrengthFunnelState {
     this.scores = const {},
     this.layerComplete = false,
     this.advancingSectorIds,
+    this.finalistSectorIds = const [],
     this.remote = false,
     this.funnelPhaseComplete = false,
   });
@@ -38,6 +41,7 @@ class StrengthFunnelState {
   final Map<String, double> scores;
   final bool layerComplete;
   final List<String>? advancingSectorIds;
+  final List<String> finalistSectorIds;
   final bool remote;
   final bool funnelPhaseComplete;
 
@@ -48,8 +52,7 @@ class StrengthFunnelState {
 
   int get scoredCount => completedSectorIds.length;
 
-  double get progress =>
-      totalTasks == 0 ? 0 : scoredCount / totalTasks;
+  double get progress => totalTasks == 0 ? 0 : scoredCount / totalTasks;
 
   bool get canStartNextLayer =>
       layerComplete &&
@@ -74,6 +77,7 @@ class StrengthFunnelState {
     Map<String, double>? scores,
     bool? layerComplete,
     List<String>? advancingSectorIds,
+    List<String>? finalistSectorIds,
     bool? remote,
     bool? funnelPhaseComplete,
   }) {
@@ -91,6 +95,7 @@ class StrengthFunnelState {
       scores: scores ?? this.scores,
       layerComplete: layerComplete ?? this.layerComplete,
       advancingSectorIds: advancingSectorIds ?? this.advancingSectorIds,
+      finalistSectorIds: finalistSectorIds ?? this.finalistSectorIds,
       remote: remote ?? this.remote,
       funnelPhaseComplete: funnelPhaseComplete ?? this.funnelPhaseComplete,
     );
@@ -98,11 +103,44 @@ class StrengthFunnelState {
 }
 
 class StrengthFunnelController extends StateNotifier<StrengthFunnelState> {
-  StrengthFunnelController(this._repository, this._readBundle)
-      : super(const StrengthFunnelState());
+  StrengthFunnelController(
+    this._repository,
+    this._readBundle,
+    this._progressService,
+  ) : super(const StrengthFunnelState());
 
   final StrengthFunnelRepository _repository;
   final IntakeSessionBundle? Function() _readBundle;
+  final StrengthFunnelProgressService _progressService;
+
+  /// Resume saved progress or start Layer 1 fresh.
+  Future<void> initializeFunnel() async {
+    final saved = await _progressService.load();
+    if (saved != null && saved.sessionId.isNotEmpty) {
+      if (saved.awaitingNextLayer && saved.advancingSectorIds.isNotEmpty) {
+        state = state.copyWith(
+          sessionId: saved.sessionId,
+          layerNumber: saved.layerNumber,
+          layerRunId: saved.layerRunId,
+          advancingSectorIds: saved.advancingSectorIds,
+          finalistSectorIds: saved.finalistSectorIds,
+          layerComplete: true,
+        );
+        return;
+      }
+      if (saved.completedSectorIds.isNotEmpty || saved.layerNumber > 1) {
+        await _startLayer(
+          saved.layerNumber,
+          sessionId: saved.sessionId,
+          advancingSectorIds: saved.advancingSectorIds.isEmpty
+              ? null
+              : saved.advancingSectorIds,
+        );
+        return;
+      }
+    }
+    await startLayer1();
+  }
 
   Future<void> startLayer1() => _startLayer(1);
 
@@ -113,10 +151,15 @@ class StrengthFunnelController extends StateNotifier<StrengthFunnelState> {
       state = state.copyWith(error: 'No advancing sectors available for the next layer.');
       return;
     }
+    await _progressService.clear();
     await _startLayer(nextLayer, advancingSectorIds: advancing);
   }
 
-  Future<void> _startLayer(int layerNumber, {List<String>? advancingSectorIds}) async {
+  Future<void> _startLayer(
+    int layerNumber, {
+    List<String>? advancingSectorIds,
+    String? sessionId,
+  }) async {
     final bundle = _readBundle();
     if (bundle == null) {
       state = state.copyWith(loading: false, error: 'Intake profile not loaded.');
@@ -126,24 +169,26 @@ class StrengthFunnelController extends StateNotifier<StrengthFunnelState> {
     state = state.copyWith(loading: true, error: null);
     try {
       StrengthFunnelStartResult result;
-      if (layerNumber == 1) {
+      final existingSession = sessionId ?? state.sessionId;
+
+      if (layerNumber == 1 && existingSession == null) {
         result = await _repository.startLayer(bundle, layerNumber: 1);
+      } else if (existingSession != null &&
+          existingSession.startsWith('local_') &&
+          layerNumber > 1 &&
+          advancingSectorIds != null) {
+        result = _repository.startLocalLayerFromScores(
+          bundle: bundle,
+          layerNumber: layerNumber,
+          sessionId: existingSession,
+          advancingSectorIds: advancingSectorIds,
+        );
       } else {
-        final sessionId = state.sessionId;
-        if (sessionId != null && advancingSectorIds != null && sessionId.startsWith('local_')) {
-          result = _repository.startLocalLayerFromScores(
-            bundle: bundle,
-            layerNumber: layerNumber,
-            sessionId: sessionId,
-            advancingSectorIds: advancingSectorIds,
-          );
-        } else {
-          result = await _repository.startLayer(
-            bundle,
-            layerNumber: layerNumber,
-            sessionId: state.sessionId,
-          );
-        }
+        result = await _repository.startLayer(
+          bundle,
+          layerNumber: layerNumber,
+          sessionId: existingSession,
+        );
       }
 
       final completed = Set<String>.from(result.completedSectorIds);
@@ -167,8 +212,10 @@ class StrengthFunnelController extends StateNotifier<StrengthFunnelState> {
         completedSectorIds: completed,
         remote: result.remote,
         layerComplete: completed.length >= result.tasks.length,
-        scores: layerNumber == 1 ? {} : state.scores,
+        finalistSectorIds: state.finalistSectorIds,
       );
+
+      await _persistInLayerProgress();
     } catch (e) {
       state = state.copyWith(loading: false, error: e.toString());
     }
@@ -194,6 +241,7 @@ class StrengthFunnelController extends StateNotifier<StrengthFunnelState> {
         modalityUsed: task.rendererModality,
         layerNumber: state.layerNumber,
         totalSectorsInLayer: state.totalTasks,
+        scoredCount: state.scoredCount + 1,
       );
 
       final completed = Set<String>.from(state.completedSectorIds)..add(task.sectorId);
@@ -219,6 +267,9 @@ class StrengthFunnelController extends StateNotifier<StrengthFunnelState> {
       }
 
       final funnelDone = layerComplete && state.layerNumber >= kStrengthFunnelBetaExitLayer;
+      final finalists = funnelDone
+          ? (advancing ?? completed.toList())
+          : state.finalistSectorIds;
 
       state = state.copyWith(
         loading: false,
@@ -227,15 +278,63 @@ class StrengthFunnelController extends StateNotifier<StrengthFunnelState> {
         currentIndex: nextIndex,
         layerComplete: layerComplete,
         advancingSectorIds: advancing,
+        finalistSectorIds: finalists,
         funnelPhaseComplete: funnelDone,
       );
+
+      if (layerComplete && !funnelDone) {
+        await _persistAwaitingNextLayer(advancing ?? []);
+      } else if (!layerComplete) {
+        await _persistInLayerProgress();
+      } else if (funnelDone) {
+        await _progressService.clear();
+      }
+
       return funnelDone;
     } catch (e) {
       state = state.copyWith(loading: false, error: e.toString());
       return false;
     }
   }
+
+  Future<void> clearProgress() => _progressService.clear();
+
+  Future<void> _persistInLayerProgress() async {
+    final sessionId = state.sessionId;
+    if (sessionId == null) return;
+    await _progressService.save(
+      StrengthFunnelProgress(
+        sessionId: sessionId,
+        layerNumber: state.layerNumber,
+        layerRunId: state.layerRunId,
+        awaitingNextLayer: false,
+        advancingSectorIds: state.advancingSectorIds ?? [],
+        finalistSectorIds: state.finalistSectorIds,
+        completedSectorIds: state.completedSectorIds.toList(),
+        layerScores: state.scores,
+      ),
+    );
+  }
+
+  Future<void> _persistAwaitingNextLayer(List<String> advancing) async {
+    final sessionId = state.sessionId;
+    if (sessionId == null) return;
+    await _progressService.save(
+      StrengthFunnelProgress(
+        sessionId: sessionId,
+        layerNumber: state.layerNumber,
+        layerRunId: state.layerRunId,
+        awaitingNextLayer: true,
+        advancingSectorIds: advancing,
+        finalistSectorIds: state.finalistSectorIds,
+      ),
+    );
+  }
 }
+
+final strengthFunnelProgressServiceProvider = Provider<StrengthFunnelProgressService>((ref) {
+  return StrengthFunnelProgressService();
+});
 
 final strengthFunnelRepositoryProvider = Provider<StrengthFunnelRepository>((ref) {
   return const StrengthFunnelRepository();
@@ -246,5 +345,6 @@ final strengthFunnelControllerProvider =
   return StrengthFunnelController(
     ref.watch(strengthFunnelRepositoryProvider),
     () => ref.watch(gameEnvironmentProvider),
+    ref.watch(strengthFunnelProgressServiceProvider),
   );
 });
