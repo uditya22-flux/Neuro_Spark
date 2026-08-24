@@ -25,10 +25,11 @@ import {
   sectorsAtLayerStart,
 } from "../_shared/strength_funnel.ts";
 import {
-  buildTaskFromTemplate,
-  type SectorRow,
-} from "../_shared/strength_funnel_tasks.ts";
+  generateSectorTask,
+  generateTaskFromTemplate,
+} from "../_shared/strength_funnel_generator.ts";
 import { catalogTemplateForSector } from "../_shared/sector_template_catalog.ts";
+import type { SectorRow } from "../_shared/strength_funnel_tasks.ts";
 
 function parseIsaa(body: Record<string, unknown>): Partial<IsaaProfile> {
   const raw = (body.isaa ?? body.isaa_profile ?? {}) as Record<string, unknown>;
@@ -83,6 +84,8 @@ Deno.serve(async (req: Request): Promise<Response> => {
     const isaa = normalizeIsaaProfile(parseIsaa(body));
     const constraints = routeModalityFromIsaa(isaa);
     const modalityJson = constraintsToJson(constraints);
+    const useLlm = layerNumber >= 6 &&
+      Deno.env.get("STRENGTH_FUNNEL_LLM_ENABLED") === "true";
 
     const { data: isaaRow, error: isaaError } = await svc
       .from("child_isaa_profiles")
@@ -217,14 +220,27 @@ Deno.serve(async (req: Request): Promise<Response> => {
       .map((id) => (sectors as SectorRow[]).find((s) => s.id === id))
       .filter((s): s is SectorRow => s != null);
 
-    const tasks = orderedSectors.map((sector) =>
-      buildTaskFromTemplate(
-        sector,
-        templateBySector.get(sector.id) ?? catalogTemplateForSector(sector.id),
-        constraints,
-        layerNumber,
-      )
-    );
+    const tasks = [];
+    for (const sector of orderedSectors) {
+      const templateJson = templateBySector.get(sector.id) ??
+        catalogTemplateForSector(sector.id);
+      const generated = useLlm
+        ? await generateSectorTask({
+          sector,
+          templateJson,
+          isaa,
+          modalityConstraints: constraints,
+          layer: layerNumber,
+        })
+        : generateTaskFromTemplate({
+          sector,
+          templateJson,
+          isaa,
+          modalityConstraints: constraints,
+          layer: layerNumber,
+        });
+      tasks.push(generated.task);
+    }
 
     const { data: existingScores } = await svc.from("strength_funnel_sector_scores")
       .select("sector_id, engagement_score")

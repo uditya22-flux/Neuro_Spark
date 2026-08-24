@@ -4,7 +4,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/theme/app_theme.dart';
 import '../../../services/modality_router.dart';
+import '../data/strength_funnel_math.dart';
 import '../models/layer1_sector_task.dart';
+import '../models/riasec_sector.dart';
 import '../providers/strength_funnel_controller.dart';
 
 /// Layer 1 sector prompt renderer — modality chosen by ISAA routing engine.
@@ -297,7 +299,7 @@ class _StrengthFunnelScreenState extends ConsumerState<StrengthFunnelScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!_initialized) {
         _initialized = true;
-        ref.read(strengthFunnelControllerProvider.notifier).startLayer1();
+        ref.read(strengthFunnelControllerProvider.notifier).initializeFunnel();
       }
     });
   }
@@ -329,7 +331,11 @@ class _StrengthFunnelScreenState extends ConsumerState<StrengthFunnelScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text('Layer $layer · Strength Exploration'),
+        title: Text(
+          isDeepDiveLayer(layer)
+              ? 'Deep dive · Layer $layer'
+              : 'Layer $layer · Strength Exploration',
+        ),
         bottom: funnel.totalTasks > 0
             ? PreferredSize(
                 preferredSize: const Size.fromHeight(4),
@@ -349,18 +355,23 @@ class _StrengthFunnelScreenState extends ConsumerState<StrengthFunnelScreen> {
               : funnel.layerComplete && funnel.canStartNextLayer
                   ? _LayerCompleteView(
                       completedLayer: layer,
-                      advancingCount: funnel.advancingSectorIds?.length ?? 18,
+                      advancingCount: funnel.advancingSectorIds?.length ??
+                          sectorsAdvancingDisplayCount(layer),
                       onContinue: _continueToNextLayer,
                     )
                   : funnel.layerComplete && funnel.readyForAssessment
-                      ? _FunnelPhaseCompleteView(onContinue: widget.onFunnelPhaseComplete)
+                      ? _FunnelPhaseCompleteView(
+                          finalistIds: funnel.finalistSectorIds,
+                          onContinue: widget.onFunnelPhaseComplete,
+                        )
                       : task == null || constraints == null
                           ? const Center(child: Text('No sectors available.'))
                           : ListView(
                               padding: const EdgeInsets.all(20),
                               children: [
                                 Text(
-                                  'Sector ${funnel.scoredCount + 1} of ${funnel.totalTasks}',
+                                  'Layer $layer · ${sectorsAtLayerStart(layer)} play themes · '
+                                  'sector ${funnel.scoredCount + 1} of ${funnel.totalTasks}',
                                   style: Theme.of(context).textTheme.labelLarge,
                                 ),
                                 const SizedBox(height: 4),
@@ -410,6 +421,7 @@ class _LayerCompleteView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     return Padding(
       padding: const EdgeInsets.all(24),
       child: Column(
@@ -420,12 +432,14 @@ class _LayerCompleteView extends StatelessWidget {
           const SizedBox(height: 16),
           Text(
             'Layer $completedLayer complete',
-            style: Theme.of(context).textTheme.headlineSmall,
+            style: theme.textTheme.headlineSmall,
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: 8),
           Text(
-            'Top $advancingCount play themes carry forward to Layer ${completedLayer + 1}.',
+            isEliminationLayer(completedLayer)
+                ? 'Top $advancingCount play themes carry forward to Layer ${completedLayer + 1}.'
+                : 'Layer ${completedLayer + 1} goes deeper into what feels most fun right now.',
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: 24),
@@ -440,32 +454,50 @@ class _LayerCompleteView extends StatelessWidget {
 }
 
 class _FunnelPhaseCompleteView extends StatelessWidget {
-  const _FunnelPhaseCompleteView({required this.onContinue});
+  const _FunnelPhaseCompleteView({
+    required this.finalistIds,
+    required this.onContinue,
+  });
 
+  final List<String> finalistIds;
   final VoidCallback onContinue;
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final labels = finalistIds
+        .map((id) => sectorById(id)?.displayName ?? id)
+        .toList();
+
     return Padding(
       padding: const EdgeInsets.all(24),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.auto_awesome_rounded,
-              size: 64, color: Theme.of(context).colorScheme.primary),
+          Icon(Icons.auto_awesome_rounded, size: 64, color: theme.colorScheme.primary),
           const SizedBox(height: 16),
           Text(
-            'Great exploring!',
-            style: Theme.of(context).textTheme.headlineSmall,
+            'All 10 layers complete',
+            style: theme.textTheme.headlineSmall,
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: 8),
-          const Text(
-            'Your top play themes are saved. Next up: deeper strength activities.',
+          Text(
+            'Top ${labels.length} play themes are your deepest sparks. '
+            'Next up: strength activities.',
             textAlign: TextAlign.center,
           ),
+          if (labels.isNotEmpty) ...[
+            const SizedBox(height: 16),
+            ...labels.map(
+              (name) => Padding(
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                child: Chip(label: Text(name)),
+              ),
+            ),
+          ],
           const SizedBox(height: 24),
-          FilledButton(onPressed: onContinue, child: const Text('Continue')),
+          FilledButton(onPressed: onContinue, child: const Text('Continue to activities')),
         ],
       ),
     );

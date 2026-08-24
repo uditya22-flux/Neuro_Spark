@@ -16,6 +16,7 @@ import {
 import {
   selectAdvancingSectors,
   sectorsAdvancingAfterLayer,
+  isEliminationLayer,
   type SectorEngagement,
 } from "../_shared/strength_funnel.ts";
 
@@ -161,19 +162,20 @@ Deno.serve(async (req: Request): Promise<Response> => {
         completed_at: new Date().toISOString(),
       }).eq("id", layerRunId);
 
-      if (layerRun.layer_number < 5) {
-        await svc.from("strength_funnel_sessions").update({
-          current_layer: nextLayer,
-          active_sector_ids: advancingSectorIds,
-        }).eq("id", sessionId);
-      } else if (layerRun.layer_number === 5) {
-        await svc.from("strength_funnel_sessions").update({
-          current_layer: 6,
-          active_sector_ids: advancingSectorIds,
-          status: "completed",
-          completed_at: new Date().toISOString(),
-        }).eq("id", sessionId);
+      const sessionUpdate: Record<string, unknown> = {
+        active_sector_ids: advancingSectorIds,
+      };
+
+      if (layerRun.layer_number >= 10) {
+        sessionUpdate.current_layer = 10;
+        sessionUpdate.status = "completed";
+        sessionUpdate.completed_at = new Date().toISOString();
+      } else {
+        sessionUpdate.current_layer = nextLayer;
       }
+
+      await svc.from("strength_funnel_sessions").update(sessionUpdate)
+        .eq("id", sessionId);
     }
 
     await writeAudit({
@@ -197,6 +199,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
       layer_complete: layerComplete,
       advancing_sector_ids: advancingSectorIds,
       next_layer: nextLayer,
+      deep_dive: !isEliminationLayer(layerRun.layer_number),
       idempotent: existing != null,
     }, existing ? 200 : 201);
   } catch (err) {

@@ -71,6 +71,7 @@ class StrengthFunnelRepository {
     required String modalityUsed,
     required int layerNumber,
     required int totalSectorsInLayer,
+    required int scoredCount,
     int? latencyMs,
   }) async {
     final client = _client;
@@ -102,7 +103,7 @@ class StrengthFunnelRepository {
     return StrengthFunnelSubmitResult.localFallback(
       sectorId: sectorId,
       engagementScore: engagementScore,
-      scoredCount: 0,
+      scoredCount: scoredCount,
       totalSectors: totalSectorsInLayer,
       layerNumber: layerNumber,
     );

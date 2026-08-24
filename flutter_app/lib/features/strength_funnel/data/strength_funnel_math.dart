@@ -34,7 +34,12 @@ List<String> selectAdvancingSectors(
   return entries.take(advanceCount).map((e) => e.key).toList();
 }
 
-/// Layers 1–2 are offered before the deepening assessment in the current beta flow.
-const kStrengthFunnelBetaExitLayer = 2;
+/// Full 10-layer funnel (5 elimination + 5 deep-dive) before deepening assessment.
+const kStrengthFunnelBetaExitLayer = 10;
 
 bool isEliminationLayer(int layer) => layer <= 5;
+
+bool isDeepDiveLayer(int layer) => layer >= 6;
+
+int sectorsAdvancingDisplayCount(int completedLayer) =>
+    sectorsAdvancingAfterLayer(completedLayer);
