@@ -1,8 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import '../../models/deepening_task_payload.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-class ConstellationMapperTaskWidget extends StatefulWidget {
+import '../../models/deepening_task_payload.dart';
+import '../../../dashboard/providers/sdui_controller.dart';
+import 'task_instruction_widgets.dart';
+
+class ConstellationMapperTaskWidget extends ConsumerStatefulWidget {
   final DeepeningTaskPayload payload;
   final Function({
     required double accuracy,
@@ -19,10 +23,10 @@ class ConstellationMapperTaskWidget extends StatefulWidget {
   });
 
   @override
-  State<ConstellationMapperTaskWidget> createState() => _ConstellationMapperTaskWidgetState();
+  ConsumerState<ConstellationMapperTaskWidget> createState() => _ConstellationMapperTaskWidgetState();
 }
 
-class _ConstellationMapperTaskWidgetState extends State<ConstellationMapperTaskWidget> {
+class _ConstellationMapperTaskWidgetState extends ConsumerState<ConstellationMapperTaskWidget> {
   final Set<int> _connectedStarIds = {};
   int _errorCount = 0;
 
@@ -54,26 +58,17 @@ class _ConstellationMapperTaskWidgetState extends State<ConstellationMapperTaskW
   void _handleCheckConstellation() {
     final requiredCount = widget.payload.taskData['required_stars'] as int? ?? 4;
     final isCorrect = _connectedStarIds.length == requiredCount;
+    final instructionStyle = ref.read(sduiControllerProvider).instructionStyle;
 
     HapticFeedback.mediumImpact();
 
     final double accuracy;
     if (isCorrect) {
       accuracy = _errorCount == 0 ? 1.0 : (1.0 / (_errorCount + 1));
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Great job! Advancing to next layer...'),
-          duration: Duration(seconds: 1),
-        ),
-      );
+      showTaskFeedback(context, instructionStyle, advanced: true);
     } else {
       accuracy = 0.4;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Response recorded! Adapting next layer task...'),
-          duration: Duration(seconds: 1),
-        ),
-      );
+      showTaskFeedback(context, instructionStyle, advanced: false);
     }
 
     widget.onSubmit(
@@ -85,6 +80,7 @@ class _ConstellationMapperTaskWidgetState extends State<ConstellationMapperTaskW
 
   @override
   Widget build(BuildContext context) {
+    final instructionStyle = ref.watch(sduiControllerProvider.select((s) => s.instructionStyle));
     final themeColor = _getPrimaryThemeColor();
     final starCount = widget.payload.taskData['total_star_nodes'] as int? ?? 6;
     final support = widget.payload.taskData['support'];
@@ -145,9 +141,11 @@ class _ConstellationMapperTaskWidgetState extends State<ConstellationMapperTaskW
             ],
           ),
           const Divider(height: 24),
-          Text(
-            widget.payload.prompt,
-            style: Theme.of(context).textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.w600),
+          TaskInstructionPrompt(
+            style: instructionStyle,
+            prompt: widget.payload.prompt,
+            icon: Icons.auto_awesome_rounded,
+            accentColor: themeColor,
           ),
           if (supportMessage != null) ...[
             const SizedBox(height: 12),
@@ -199,22 +197,11 @@ class _ConstellationMapperTaskWidgetState extends State<ConstellationMapperTaskW
             ),
           ),
           const SizedBox(height: 24),
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton(
-              onPressed: _connectedStarIds.isNotEmpty ? _handleCheckConstellation : null,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: themeColor,
-                padding: const EdgeInsets.symmetric(vertical: 14),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16),
-                ),
-              ),
-              child: const Text(
-                'Submit Constellation Pattern',
-                style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
-              ),
-            ),
+          TaskContinueButton(
+            style: instructionStyle,
+            onPressed: _connectedStarIds.isNotEmpty ? _handleCheckConstellation : null,
+            accentColor: themeColor,
+            textLabel: 'Submit Constellation Pattern',
           ),
         ],
       ),

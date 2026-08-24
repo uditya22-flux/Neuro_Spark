@@ -1,8 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import '../../models/deepening_task_payload.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-class CalendarGeniusTaskWidget extends StatefulWidget {
+import '../../models/deepening_task_payload.dart';
+import '../../../../models/intake_models.dart';
+import '../../../dashboard/providers/sdui_controller.dart';
+import 'task_instruction_widgets.dart';
+
+class CalendarGeniusTaskWidget extends ConsumerStatefulWidget {
   final DeepeningTaskPayload payload;
   final Function({
     required double accuracy,
@@ -19,10 +24,10 @@ class CalendarGeniusTaskWidget extends StatefulWidget {
   });
 
   @override
-  State<CalendarGeniusTaskWidget> createState() => _CalendarGeniusTaskWidgetState();
+  ConsumerState<CalendarGeniusTaskWidget> createState() => _CalendarGeniusTaskWidgetState();
 }
 
-class _CalendarGeniusTaskWidgetState extends State<CalendarGeniusTaskWidget> {
+class _CalendarGeniusTaskWidgetState extends ConsumerState<CalendarGeniusTaskWidget> {
   String? _selectedDay;
   int _errorCount = 0;
 
@@ -60,6 +65,8 @@ class _CalendarGeniusTaskWidgetState extends State<CalendarGeniusTaskWidget> {
   void _handleCheckAnswer() {
     if (_selectedDay == null) return;
 
+    final instructionStyle = ref.read(sduiControllerProvider).instructionStyle;
+
     // The server deliberately withholds the answer key. Derive the visible
     // calendar answer locally for feedback; the server remains authoritative
     // when the response is submitted.
@@ -72,20 +79,10 @@ class _CalendarGeniusTaskWidgetState extends State<CalendarGeniusTaskWidget> {
     final double accuracy;
     if (isCorrect) {
       accuracy = _errorCount == 0 ? 1.0 : (1.0 / (_errorCount + 1));
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Great job! Advancing to next layer...'),
-          duration: Duration(seconds: 1),
-        ),
-      );
+      showTaskFeedback(context, instructionStyle, advanced: true);
     } else {
       accuracy = 0.2;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Response recorded! Adapting next layer task...'),
-          duration: Duration(seconds: 1),
-        ),
-      );
+      showTaskFeedback(context, instructionStyle, advanced: false);
     }
 
     widget.onSubmit(
@@ -107,6 +104,7 @@ class _CalendarGeniusTaskWidgetState extends State<CalendarGeniusTaskWidget> {
 
   @override
   Widget build(BuildContext context) {
+    final instructionStyle = ref.watch(sduiControllerProvider.select((s) => s.instructionStyle));
     final themeColor = _getPrimaryThemeColor();
     final targetDate = widget.payload.taskData['target_date'] as String? ?? '2026-07-20';
     final visibleDays = widget.payload.taskData['visible_options'] is List
@@ -170,9 +168,11 @@ class _CalendarGeniusTaskWidgetState extends State<CalendarGeniusTaskWidget> {
             ],
           ),
           const Divider(height: 24),
-          Text(
-            widget.payload.prompt,
-            style: Theme.of(context).textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.w600),
+          TaskInstructionPrompt(
+            style: instructionStyle,
+            prompt: widget.payload.prompt,
+            icon: Icons.calendar_month_rounded,
+            accentColor: themeColor,
           ),
           if (supportMessage != null) ...[
             const SizedBox(height: 12),
@@ -222,22 +222,13 @@ class _CalendarGeniusTaskWidgetState extends State<CalendarGeniusTaskWidget> {
             }).toList(),
           ),
           const SizedBox(height: 24),
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton(
-              onPressed: _selectedDay != null ? _handleCheckAnswer : null,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: themeColor,
-                padding: const EdgeInsets.symmetric(vertical: 14),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16),
-                ),
-              ),
-              child: const Text(
-                'Submit Task Answer',
-                style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
-              ),
-            ),
+          TaskContinueButton(
+            style: instructionStyle,
+            onPressed: _selectedDay != null ? _handleCheckAnswer : null,
+            accentColor: themeColor,
+            textLabel: instructionStyle == InstructionStyle.simpleText
+                ? 'Submit Task Answer'
+                : 'Continue',
           ),
         ],
       ),

@@ -1,13 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+
 import 'core/theme/app_theme.dart';
 import 'core/theme/safe_mode_provider.dart';
 import 'core/services/supabase_service.dart';
 import 'core/services/firebase_service.dart';
 import 'core/services/notification_service.dart';
-import 'features/onboarding/widgets/neuro_spark_intake_flow.dart';
+import 'models/intake_models.dart';
+import 'providers/game_environment_provider.dart';
 import 'core/router/app_router.dart';
+import 'services/intake_persistence_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -32,6 +35,9 @@ void main() async {
   // Initialize Firebase and trigger token sync checks
   await container.read(firebaseServiceProvider).initializeAndRegisterToken();
 
+  // Restore persisted intake customization + flow progress before first frame.
+  await restorePersistedIntakeSession(container);
+
   runApp(
     UncontrolledProviderScope(
       container: container,
@@ -45,19 +51,18 @@ class NeuroSparkApp extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    // 1. Listen to global SafeModeProvider
     final safeMode = ref.watch(safeModeProvider);
+    final gameConfig = ref.watch(activeGameConfigProvider);
     final router = ref.watch(routerProvider);
+
+    final preferDark = safeMode.isEnabled || gameConfig?.themePalette == ThemePalette.calmDark;
 
     return MaterialApp.router(
       title: 'NeuroSpark Accessibility App',
       debugShowCheckedModeBanner: false,
-      
-      // 2. Swaps context colors instantly to dark high contrast theme if enabled
       theme: AppTheme.lightTheme,
       darkTheme: AppTheme.darkTheme,
-      themeMode: safeMode.isEnabled ? ThemeMode.dark : ThemeMode.light,
-      
+      themeMode: preferDark ? ThemeMode.dark : ThemeMode.light,
       routerConfig: router,
     );
   }

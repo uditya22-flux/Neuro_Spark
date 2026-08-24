@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../../../core/theme/app_theme.dart';
+import '../../../models/intake_models.dart';
+import '../../../providers/game_environment_provider.dart';
 import '../models/neuro_profile.dart';
 
 class SensoryConfig {
@@ -25,6 +28,12 @@ class SduiState {
   final bool isAacMode;
   final String activeProfileName;
   final Map<String, dynamic> dynamicGenUiSchema;
+  final InstructionStyle instructionStyle;
+  final String themeSkin;
+  final List<String> blacklistedSoundTriggers;
+  final List<String> blacklistedVisualTriggers;
+  final bool pacingSlowed;
+  final bool strictGroundingEnforced;
 
   const SduiState({
     required this.profile,
@@ -34,6 +43,12 @@ class SduiState {
     required this.isAacMode,
     required this.activeProfileName,
     required this.dynamicGenUiSchema,
+    this.instructionStyle = InstructionStyle.pictorialGuideCards,
+    this.themeSkin = 'cosmic_space',
+    this.blacklistedSoundTriggers = const [],
+    this.blacklistedVisualTriggers = const [],
+    this.pacingSlowed = false,
+    this.strictGroundingEnforced = true,
   });
 
   SduiState copyWith({
@@ -44,6 +59,12 @@ class SduiState {
     bool? isAacMode,
     String? activeProfileName,
     Map<String, dynamic>? dynamicGenUiSchema,
+    InstructionStyle? instructionStyle,
+    String? themeSkin,
+    List<String>? blacklistedSoundTriggers,
+    List<String>? blacklistedVisualTriggers,
+    bool? pacingSlowed,
+    bool? strictGroundingEnforced,
   }) {
     return SduiState(
       profile: profile ?? this.profile,
@@ -53,6 +74,12 @@ class SduiState {
       isAacMode: isAacMode ?? this.isAacMode,
       activeProfileName: activeProfileName ?? this.activeProfileName,
       dynamicGenUiSchema: dynamicGenUiSchema ?? this.dynamicGenUiSchema,
+      instructionStyle: instructionStyle ?? this.instructionStyle,
+      themeSkin: themeSkin ?? this.themeSkin,
+      blacklistedSoundTriggers: blacklistedSoundTriggers ?? this.blacklistedSoundTriggers,
+      blacklistedVisualTriggers: blacklistedVisualTriggers ?? this.blacklistedVisualTriggers,
+      pacingSlowed: pacingSlowed ?? this.pacingSlowed,
+      strictGroundingEnforced: strictGroundingEnforced ?? this.strictGroundingEnforced,
     );
   }
 }
@@ -172,6 +199,7 @@ class SduiController extends StateNotifier<SduiState> {
       isAacMode: isAacMode,
       activeProfileName: name,
       dynamicGenUiSchema: dynamicSchema,
+      themeSkin: profile.themeSkin,
     );
   }
 
@@ -201,6 +229,7 @@ class SduiController extends StateNotifier<SduiState> {
         isAacMode: isAacMode,
         activeProfileName: 'Custom Profile: ${customProfile.userProfile.name}',
         dynamicGenUiSchema: dynamicSchema,
+        themeSkin: customProfile.themeSkin,
       );
     } catch (e) {
       debugPrint('ERROR: Intake profile parsing or layout calculation failed: $e. Defaulting to safe baseline layout.');
@@ -208,28 +237,193 @@ class SduiController extends StateNotifier<SduiState> {
     }
   }
 
+  /// Applies the dual-layer intake bundle across theme, sensory, layout, and GenUI.
+  void applyGameEnvironment({
+    required IntakeSessionBundle bundle,
+    required NeuroProfile profile,
+  }) {
+    final config = bundle.config;
+    final layoutOrder = _calculateLayoutOrderFromIsaa(bundle.clinical);
+    final themeData = _generateThemeFromEnvironment(config, profile, bundle.parent);
+    final sensoryConfig = _generateSensoryConfigFromEnvironment(config);
+    final isAacMode = config.instructionStyle == InstructionStyle.pureVisualGlowHints ||
+        config.instructionStyle == InstructionStyle.pictorialGuideCards;
+    final dynamicSchema = generateDynamicGenUiSchema(profile);
+    final skin = assetThemeToSkin(config.assetTheme);
+
+    state = SduiState(
+      profile: profile,
+      layoutOrder: layoutOrder,
+      themeData: themeData,
+      sensoryConfig: sensoryConfig,
+      isAacMode: isAacMode,
+      activeProfileName: 'Intake: ${profile.userProfile.name}',
+      dynamicGenUiSchema: dynamicSchema,
+      instructionStyle: config.instructionStyle,
+      themeSkin: skin,
+      blacklistedSoundTriggers: List<String>.from(bundle.parent.soundTriggers),
+      blacklistedVisualTriggers: List<String>.from(bundle.parent.visualTriggers),
+      pacingSlowed: config.pacingSlowed,
+      strictGroundingEnforced: config.strictGroundingEnforced,
+    );
+  }
+
+  List<String> _calculateLayoutOrderFromIsaa(ISAAClinicalProfile clinical) {
+    final components = ['schedule', 'emotion', 'talent', 'sensory'];
+    final scores = <String, int>{
+      'schedule': clinical.behaviorPatterns * 15 + clinical.socialRelationship * 8,
+      'emotion': clinical.emotionalResponsiveness * 18,
+      'talent': clinical.cognitiveComponent * 16,
+      'sensory': clinical.sensoryAspects * 20,
+    };
+    components.sort((a, b) => (scores[b] ?? 0).compareTo(scores[a] ?? 0));
+    return components;
+  }
+
+  ThemeData _generateThemeFromEnvironment(
+    GameEnvironmentConfig config,
+    NeuroProfile profile,
+    ParentQualitativeProfile parent,
+  ) {
+    final reduceMotion = config.pacingSlowed ||
+        parent.visualTriggers.contains('Rapid flashing') ||
+        parent.visualTriggers.contains('Parallax scrolling');
+    final baseTheme = config.themePalette == ThemePalette.calmDark
+        ? AppTheme.darkTheme
+        : AppTheme.lightTheme;
+    final profileTheme = _generateThemeData(profile);
+    final flatCards = config.strictGroundingEnforced ||
+        parent.visualTriggers.contains('Floating UI elements');
+
+    return profileTheme.copyWith(
+      brightness: baseTheme.brightness,
+      scaffoldBackgroundColor: baseTheme.scaffoldBackgroundColor,
+      pageTransitionsTheme: reduceMotion
+          ? const PageTransitionsTheme(builders: {
+              TargetPlatform.android: FadeUpwardsPageTransitionsBuilder(),
+              TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
+            })
+          : profileTheme.pageTransitionsTheme,
+      cardTheme: profileTheme.cardTheme?.copyWith(
+        elevation: flatCards ? 0 : profileTheme.cardTheme?.elevation,
+      ),
+    );
+  }
+
+  SensoryConfig _generateSensoryConfigFromEnvironment(GameEnvironmentConfig config) {
+    final muted = config.audioMode == AudioMode.completelyMuted;
+    if (muted && config.instructionStyle == InstructionStyle.pureVisualGlowHints) {
+      return SensoryConfig(
+        useAudioChimes: false,
+        useRhythmicHaptics: config.hapticEnabled,
+        useHeavyHaptics: config.hapticEnabled,
+        silentVisualGlowOnly: true,
+      );
+    }
+    if (muted) {
+      return SensoryConfig(
+        useAudioChimes: false,
+        useRhythmicHaptics: config.hapticEnabled,
+        useHeavyHaptics: config.hapticEnabled,
+        silentVisualGlowOnly: false,
+      );
+    }
+    return SensoryConfig(
+      useAudioChimes: config.audioMode == AudioMode.subtleSoundEffectsOnly,
+      useRhythmicHaptics: config.hapticEnabled,
+      useHeavyHaptics: false,
+      silentVisualGlowOnly: false,
+    );
+  }
+
   Future<void> fetchActiveProfile() async {
     try {
       final client = Supabase.instance.client;
-      // Fetch latest profile config payload from table 'profiles'
+      final userId = client.auth.currentUser?.id;
+      if (userId == null) return;
+
       final response = await client
           .from('profiles')
-          .select()
-          .order('created_at', ascending: false)
-          .limit(1)
+          .select('generative_ui_parameters, updated_at')
+          .eq('id', userId)
           .maybeSingle();
 
-      if (response != null && response['profile_data'] != null) {
-        final profileJson = response['profile_data'] as Map<String, dynamic>;
-        final profile = NeuroProfile.fromJson(profileJson);
-        loadCustomProfile(profile);
-        debugPrint('Successfully fetched fresh profile payload from database: ${profile.userProfile.name}');
-      } else {
-        debugPrint('No customized profile payload found in database. Relying on default.');
+      if (response == null) return;
+
+      final params = response['generative_ui_parameters'];
+      if (params is Map<String, dynamic>) {
+        final clinicalRaw = params['isaa_clinical'];
+        final parentRaw = params['parent_qualitative'];
+        final configRaw = params['game_environment'];
+
+        if (clinicalRaw is Map && parentRaw is Map && configRaw is Map) {
+          final bundle = IntakeSessionBundle(
+            clinical: ISAAClinicalProfile.fromJson(Map<String, dynamic>.from(clinicalRaw)),
+            parent: ParentQualitativeProfile.fromJson(Map<String, dynamic>.from(parentRaw)),
+            config: GameEnvironmentConfig.fromJson(Map<String, dynamic>.from(configRaw)),
+            childId: params['child_id'] as String?,
+            persistedAt: response['updated_at'] != null
+                ? DateTime.tryParse(response['updated_at'] as String)
+                : null,
+          );
+          applyGameEnvironment(
+            bundle: bundle,
+            profile: toNeuroProfileFromBundle(bundle),
+          );
+          debugPrint('Loaded persisted intake profile for ${bundle.parent.childName}.');
+          return;
+        }
+
+        final legacyProfile = params['profile_json'];
+        if (legacyProfile is Map<String, dynamic>) {
+          loadCustomProfile(NeuroProfile.fromJson(legacyProfile));
+          return;
+        }
       }
+
+      debugPrint('No customized profile payload found in database. Relying on default.');
     } catch (e) {
       debugPrint('WARNING: Database profile fetch failed: $e. Fallback to default in-memory configs.');
     }
+  }
+
+  NeuroProfile toNeuroProfileFromBundle(IntakeSessionBundle bundle) {
+    return NeuroProfile.fromJson({
+      'user_profile': {
+        'name': bundle.parent.childName.isEmpty ? 'Friend' : bundle.parent.childName,
+        'age': bundle.parent.childAge,
+      },
+      'visual_environmental_affinities': {
+        'favorite_color': bundle.config.themePalette == ThemePalette.calmDark
+            ? 'deep_sea_indigo'
+            : 'sage_green',
+        'favorite_place': 'home',
+        'favorite_object': bundle.config.assetTheme,
+      },
+      'sensory_profile': {
+        'auditory_reaction': bundle.config.audioMode == AudioMode.completelyMuted
+            ? 'highly_sensitive'
+            : 'neutral',
+        'visual_distress': bundle.config.themePalette == ThemePalette.calmDark ? 'high' : 'none',
+        'effective_regulation_method': bundle.config.hapticEnabled
+            ? 'rhythmic_tapping'
+            : 'visual_glow',
+      },
+      'routine_transitions': {
+        'transition_difficulty_score': bundle.clinical.behaviorPatterns,
+        'unexpected_change_distress': 'low',
+        'instruction_processing_preference': 'visual',
+      },
+      'strengths_special_interests': {
+        'natural_abilities': ['exploration'],
+        'primary_hyper_fixation': bundle.config.assetTheme,
+        'problem_solving_approach': 'visual_mapping',
+      },
+      'communication_emotion': {
+        'stress_communication_style': 'standard_speech',
+        'emotional_interoception_level': 'medium',
+      },
+    });
   }
 
   List<String> _calculateLayoutOrder(NeuroProfile profile) {

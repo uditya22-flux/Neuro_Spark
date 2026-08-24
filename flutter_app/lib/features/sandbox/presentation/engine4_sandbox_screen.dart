@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/sandbox_controller.dart';
+import '../../../providers/game_environment_provider.dart';
 import 'widgets/calendar_genius_sandbox.dart';
 import 'widgets/constellation_mapper_sandbox.dart';
 import 'widgets/dynamic_glass_container.dart';
@@ -24,9 +25,11 @@ class _Engine4SandboxScreenState extends ConsumerState<Engine4SandboxScreen> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      final tier = ref.read(activeStartingTierProvider);
       ref.read(sandboxControllerProvider.notifier).startSession(
             userId: widget.userId,
             verticalId: widget.initialVerticalId,
+            initialDifficultyTier: tier,
           );
     });
   }

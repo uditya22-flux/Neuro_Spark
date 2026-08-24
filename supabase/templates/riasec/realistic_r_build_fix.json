@@ -1,0 +1,81 @@
+{
+  "template_version": "2026-08-24",
+  "sector_id": "r_build_fix",
+  "riasec_type": "realistic",
+  "display_name": "Build & Fix",
+  "framing_rules": {
+    "golden_rule": "Measure present-moment enjoyment only. Never reference future jobs, careers, salaries, or adult work roles.",
+    "prompt_tone": "playful_now",
+    "forbidden_terms": [
+      "career",
+      "job",
+      "employ",
+      "salary",
+      "when you grow up",
+      "become a",
+      "profession",
+      "industry"
+    ],
+    "required_framing": "Ask whether the child is enjoying this activity right now."
+  },
+  "visual_guidelines": {
+    "style": "simple_stylized_drawing",
+    "show_gender_features": false,
+    "show_complex_facial_expressions": false,
+    "focus": "concrete_activity_only",
+    "avoid_visual_clutter": true
+  },
+  "generation_schema": {
+    "type": "object",
+    "required": ["present_moment_prompt", "activity_scene", "response_modality", "enjoyment_scale"],
+    "properties": {
+      "present_moment_prompt": {
+        "type": "string",
+        "description": "Short, child-friendly question about enjoying the activity NOW.",
+        "examples": [
+          "Do you like fixing toy wheels right now?",
+          "Is building with blocks fun for you today?"
+        ]
+      },
+      "activity_scene": {
+        "type": "object",
+        "properties": {
+          "activity_label": { "type": "string" },
+          "simple_picture_description": { "type": "string" },
+          "optional_video_loop_description": { "type": "string" }
+        }
+      },
+      "response_modality": {
+        "type": "string",
+        "enum": ["picture", "video", "text", "haptic"],
+        "description": "Filled by modality router — not by the LLM."
+      },
+      "enjoyment_scale": {
+        "type": "object",
+        "properties": {
+          "type": { "const": "present_moment_likert_visual" },
+          "min_label": { "const": "Not fun right now" },
+          "max_label": { "const": "Really fun right now" }
+        }
+      }
+    }
+  },
+  "sample_generated_task": {
+    "present_moment_prompt": "Is snapping blocks together fun for you right now?",
+    "activity_scene": {
+      "activity_label": "Building a small tower",
+      "simple_picture_description": "A plain side-view drawing of two hands stacking three blocks. No faces. Neutral colors.",
+      "optional_video_loop_description": "A 3-second loop of blocks clicking together with no background music."
+    },
+    "response_modality": "picture",
+    "enjoyment_scale": {
+      "type": "present_moment_likert_visual",
+      "min_label": "Not fun right now",
+      "max_label": "Really fun right now"
+    }
+  },
+  "play_concept_sources": [
+    "pediatric_iconographic_inventories",
+    "elementary_hobby_drawings_age_8_to_13"
+  ]
+}

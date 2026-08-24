@@ -73,9 +73,10 @@ class _NeuroSparkIntakeFlowState extends ConsumerState<NeuroSparkIntakeFlow> {
           isLoggedIn: true,
           userId: 'user_guardian_101',
           hasCompletedIntake: true,
+          hasCompletedStrengthFunnel: false,
           hasCompletedAssessment: false,
         );
-        context.go('/assessment-canvas');
+        context.go('/strength-funnel');
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Failed to initialize theme. Please try again.')),

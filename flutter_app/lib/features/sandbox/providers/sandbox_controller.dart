@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../../../providers/game_environment_provider.dart';
 import '../models/sandbox_session.dart';
 import '../models/sandbox_attempt.dart';
 
@@ -41,7 +42,9 @@ class SandboxState {
 }
 
 class SandboxController extends StateNotifier<SandboxState> {
-  SandboxController() : super(const SandboxState());
+  SandboxController(this.ref) : super(const SandboxState());
+
+  final Ref ref;
 
   SupabaseClient? get _client {
     try {
@@ -55,8 +58,11 @@ class SandboxController extends StateNotifier<SandboxState> {
   Future<void> startSession({
     required String userId,
     required String verticalId,
+    int? initialDifficultyTier,
   }) async {
-    state = state.copyWith(isLoading: true, activeVerticalId: verticalId);
+    final tier = initialDifficultyTier ??
+        ref.read(activeStartingTierProvider);
+    state = state.copyWith(isLoading: true, activeVerticalId: verticalId, currentDifficultyTier: tier);
 
     final client = _client;
     if (client != null) {
@@ -156,5 +162,5 @@ class SandboxController extends StateNotifier<SandboxState> {
 }
 
 final sandboxControllerProvider = StateNotifierProvider<SandboxController, SandboxState>((ref) {
-  return SandboxController();
+  return SandboxController(ref);
 });
