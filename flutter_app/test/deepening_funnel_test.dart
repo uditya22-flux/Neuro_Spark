@@ -5,6 +5,7 @@ import 'package:mindbridge_app/features/deepening/models/deepening_task_payload.
 import 'package:mindbridge_app/features/deepening/models/telemetry_payload.dart';
 import 'package:mindbridge_app/features/deepening/presentation/deepening_funnel_canvas.dart';
 import 'package:mindbridge_app/features/deepening/presentation/widgets/calendar_genius_task_widget.dart';
+import 'package:mindbridge_app/features/strength_funnel/presentation/layer1_sector_prompt_widget.dart';
 import 'package:mindbridge_app/core/router/app_router.dart';
 
 void main() {
@@ -62,12 +63,14 @@ void main() {
       );
 
       await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: CalendarGeniusTaskWidget(
-              payload: payload,
-              onSubmit: ({required accuracy, required response, required errorCount}) {},
-              onHintTriggered: () {},
+        ProviderScope(
+          child: MaterialApp(
+            home: Scaffold(
+              body: CalendarGeniusTaskWidget(
+                payload: payload,
+                onSubmit: ({required accuracy, required response, required errorCount}) {},
+                onHintTriggered: () {},
+              ),
             ),
           ),
         ),
@@ -78,7 +81,7 @@ void main() {
       expect(find.text('Monday'), findsOneWidget);
     });
 
-    testWidgets('GoRouter redirects users with pending assessments to /assessment-canvas', (WidgetTester tester) async {
+    testWidgets('GoRouter redirects users with pending strength funnel to /strength-funnel', (WidgetTester tester) async {
       final container = ProviderContainer(
         overrides: [
           authStatusProvider.overrideWith(
@@ -86,6 +89,7 @@ void main() {
               isLoggedIn: true,
               userId: 'user_101',
               hasCompletedIntake: true,
+              hasCompletedStrengthFunnel: false,
               hasCompletedAssessment: false,
             ),
           ),
@@ -106,8 +110,8 @@ void main() {
       await tester.pump(const Duration(seconds: 1));
       await tester.pump(const Duration(seconds: 1));
 
-      expect(router.state.matchedLocation, equals('/assessment-canvas'));
-      expect(find.byType(DeepeningFunnelCanvas), findsOneWidget);
+      expect(router.state.matchedLocation, equals('/strength-funnel'));
+      expect(find.byType(Layer1FunnelScreen), findsOneWidget);
     });
   });
 }

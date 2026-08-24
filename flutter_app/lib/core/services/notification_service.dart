@@ -1,6 +1,10 @@
 import 'dart:typed_data';
+
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../models/intake_models.dart';
+import '../../providers/game_environment_provider.dart';
 import '../theme/safe_mode_provider.dart';
 
 class NotificationService {
@@ -27,69 +31,67 @@ class NotificationService {
 
     await _notificationsPlugin.initialize(
       initializationSettings,
-      onDidReceiveNotificationResponse: (NotificationResponse details) {
-        // Handle notification click
-      },
+      onDidReceiveNotificationResponse: (NotificationResponse details) {},
     );
   }
 
-  /// Evaluates current state constraints (SafeMode / Deep Work timeline)
-  /// and shows a notification message using either the soft sound channel
-  /// or a visual-only silent channel to prevent cognitive shock.
+  /// Respects Safe Mode, deep-work windows, and intake sound-trigger blacklists.
   Future<void> showSensoryNotification({
     required int id,
     required String title,
     required String body,
   }) async {
-    // 1. Read current SafeMode state from Riverpod
     final safeMode = _ref.read(safeModeProvider);
+    final bundle = _ref.read(gameEnvironmentProvider);
+    final config = bundle?.config;
+    final soundTriggers = bundle?.parent.soundTriggers ?? const <String>[];
 
-    // 2. Check if the current time sits inside a "Deep Work Block"
+    final intakeRequiresSilence = config?.audioMode == AudioMode.completelyMuted ||
+        soundTriggers.isNotEmpty;
     final isDeepWork = _checkDeepWorkTimeline();
+    final shouldBeSilent = safeMode.isEnabled || isDeepWork || intakeRequiresSilence;
+    final hapticEnabled = config?.hapticEnabled ?? false;
 
-    final bool shouldBeSilent = safeMode.isEnabled || isDeepWork;
-
-    NotificationDetails platformChannelSpecifics;
+    final NotificationDetails platformChannelSpecifics;
 
     if (shouldBeSilent) {
-      // Configure silent visual banner (no audio feedback, lower importance)
-      const AndroidNotificationDetails androidSilent = AndroidNotificationDetails(
+      final androidSilent = AndroidNotificationDetails(
         'sensory_silent_channel',
         'Silent Sensory Notifications',
-        channelDescription: 'Visual alerts only for Deep Work or Safe Mode',
+        channelDescription: 'Visual-only alerts when intake triggers or Safe Mode are active',
         importance: Importance.low,
         priority: Priority.low,
         playSound: false,
-        enableVibration: false,
+        enableVibration: hapticEnabled,
+        vibrationPattern: hapticEnabled ? Int64List.fromList([0, 80, 120, 80]) : null,
       );
 
-      const DarwinNotificationDetails iosSilent = DarwinNotificationDetails(
+      const iosSilent = DarwinNotificationDetails(
         presentSound: false,
         presentAlert: true,
       );
 
-      platformChannelSpecifics = const NotificationDetails(
+      platformChannelSpecifics = NotificationDetails(
         android: androidSilent,
         iOS: iosSilent,
       );
     } else {
-      // Configure sensory-friendly soft notification channel
-      // The audio asset 'marimba_hum' must reside in: android/app/src/main/res/raw/marimba_hum.mp3
-      final AndroidNotificationDetails androidSoft = AndroidNotificationDetails(
+      final useSoftAudio = config?.audioMode != AudioMode.completelyMuted;
+      final androidSoft = AndroidNotificationDetails(
         'sensory_soft_channel',
         'Sensory Friendly Alerts',
         channelDescription: 'Low-frequency accessibility notification sounds',
         importance: Importance.max,
         priority: Priority.high,
-        sound: const RawResourceAndroidNotificationSound('marimba_hum'),
-        playSound: true,
-        enableVibration: true,
-        vibrationPattern: Int64List.fromList([0, 100, 200, 100]), // Muted double-tap vibration
+        sound: useSoftAudio ? const RawResourceAndroidNotificationSound('marimba_hum') : null,
+        playSound: useSoftAudio,
+        enableVibration: hapticEnabled,
+        vibrationPattern: hapticEnabled ? Int64List.fromList([0, 100, 200, 100]) : null,
       );
 
-      const DarwinNotificationDetails iosSoft = DarwinNotificationDetails(
-        sound: 'marimba_hum.caf',
-        presentSound: true,
+      final iosSoft = DarwinNotificationDetails(
+        sound: useSoftAudio ? 'marimba_hum.caf' : null,
+        presentSound: useSoftAudio,
         presentAlert: true,
       );
 
@@ -99,27 +101,15 @@ class NotificationService {
       );
     }
 
-    await _notificationsPlugin.show(
-      id,
-      title,
-      body,
-      platformChannelSpecifics,
-    );
+    await _notificationsPlugin.show(id, title, body, platformChannelSpecifics);
   }
 
-  /// Helper evaluating user timeline for deep focus periods.
-  /// (e.g. daily block intervals like 2:00 PM - 4:00 PM)
   bool _checkDeepWorkTimeline() {
     final now = DateTime.now();
-    // Simulate deep work time constraints (e.g., between 2:00 PM and 4:00 PM, i.e., 14:00 - 16:00)
-    if (now.hour >= 14 && now.hour < 16) {
-      return true;
-    }
-    return false;
+    return now.hour >= 14 && now.hour < 16;
   }
 }
 
 final notificationServiceProvider = Provider<NotificationService>((ref) {
-  final service = NotificationService(ref);
-  return service;
+  return NotificationService(ref);
 });

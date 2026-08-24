@@ -1,7 +1,12 @@
 import 'package:flutter/material.dart';
-import '../../models/deepening_task_payload.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-class ChoicePatternTaskWidget extends StatefulWidget {
+import '../../../../models/intake_models.dart';
+import '../../models/deepening_task_payload.dart';
+import '../../../dashboard/providers/sdui_controller.dart';
+import 'task_instruction_widgets.dart';
+
+class ChoicePatternTaskWidget extends ConsumerStatefulWidget {
   final DeepeningTaskPayload payload;
   final Function({
     required double accuracy,
@@ -18,10 +23,10 @@ class ChoicePatternTaskWidget extends StatefulWidget {
   });
 
   @override
-  State<ChoicePatternTaskWidget> createState() => _ChoicePatternTaskWidgetState();
+  ConsumerState<ChoicePatternTaskWidget> createState() => _ChoicePatternTaskWidgetState();
 }
 
-class _ChoicePatternTaskWidgetState extends State<ChoicePatternTaskWidget> {
+class _ChoicePatternTaskWidgetState extends ConsumerState<ChoicePatternTaskWidget> {
   String? _selected;
   final _textController = TextEditingController();
 
@@ -44,6 +49,7 @@ class _ChoicePatternTaskWidgetState extends State<ChoicePatternTaskWidget> {
 
   @override
   Widget build(BuildContext context) {
+    final instructionStyle = ref.watch(sduiControllerProvider.select((s) => s.instructionStyle));
     final rawOptions = widget.payload.taskData['options'];
     final options = rawOptions is List
         ? rawOptions.map((option) => option.toString()).toList()
@@ -51,6 +57,7 @@ class _ChoicePatternTaskWidgetState extends State<ChoicePatternTaskWidget> {
     final support = widget.payload.taskData['support'];
     final supportMessage = support is Map ? support['message'] as String? : null;
     final response = options.isEmpty ? _textController.text.trim() : _selected;
+    final accent = Theme.of(context).colorScheme.primary;
 
     return Card(
       child: Padding(
@@ -76,7 +83,13 @@ class _ChoicePatternTaskWidgetState extends State<ChoicePatternTaskWidget> {
               ],
             ),
             const SizedBox(height: 16),
-            Text(widget.payload.prompt, style: Theme.of(context).textTheme.bodyLarge),
+            TaskInstructionPrompt(
+              style: instructionStyle,
+              prompt: widget.payload.prompt,
+              icon: Icons.extension_rounded,
+              accentColor: accent,
+              compact: true,
+            ),
             if (supportMessage != null) ...[
               const SizedBox(height: 12),
               Container(
@@ -100,25 +113,26 @@ class _ChoicePatternTaskWidgetState extends State<ChoicePatternTaskWidget> {
                   onSelected: (_) => setState(() => _selected = option),
                 )).toList(),
               )
-            else
+            else if (instructionStyle != InstructionStyle.pureVisualGlowHints)
               TextField(
                 controller: _textController,
                 onChanged: (_) => setState(() {}),
                 decoration: const InputDecoration(labelText: 'Your answer'),
               ),
             const SizedBox(height: 20),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                onPressed: response == null || response.isEmpty
-                    ? null
-                    : () => widget.onSubmit(
-                      accuracy: 0,
-                      response: response,
-                      errorCount: 0,
-                    ),
-                child: const Text('Continue'),
-              ),
+            TaskContinueButton(
+              style: instructionStyle,
+              onPressed: response == null || response.isEmpty
+                  ? null
+                  : () {
+                      showTaskFeedback(context, instructionStyle, advanced: true);
+                      widget.onSubmit(
+                        accuracy: 0,
+                        response: response,
+                        errorCount: 0,
+                      );
+                    },
+              accentColor: accent,
             ),
           ],
         ),

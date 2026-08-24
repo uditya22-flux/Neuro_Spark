@@ -1,0 +1,43 @@
+System Architecture & AI Generation Rules
+
+1. Core Framework: 30 Sectors (RIASEC)
+
+The system operates across 30 interest sectors derived from the RIASEC model (Realistic, Investigative, Artistic, Social, Enterprising, Conventional).
+
+The generative AI must not rely on a static database of questions. Instead, it will use JSON templates to dynamically generate tasks in real-time for each of the 30 sectors.
+
+The Golden Prompting Rule: When the AI generates a task or question, it must strictly measure how much the child enjoys the activity in the present moment. The AI must never ask if the child wants that activity to be a future career, as singular, present-moment framing yields significantly more accurate results.  
+
+2. The ISAA Modality Routing Engine
+
+The AI must dynamically adjust the format of the generated tasks (text, video, pictures, or haptics) based on the user's inputted Indian Scale for Assessment of Autism (ISAA) scores and sensory profile.
+
+Visual/Non-Verbal Routing: For users with low verbal/language ISAA scores, the system must entirely avoid text-heavy or reading-based questionnaires. The AI must instead generate visual items and simple, stylized pictures of activities, as these do not require reading and vocal skills.  
+
+Sensory Routing: The visual items generated must focus strictly on the concrete activity being performed. To accommodate sensory avoidances and processing differences, the AI must present concepts as simple drawings without notable gender features or complex facial expressions, avoiding unnecessary visual clutter.  
+
+3. Activity Concept Sourcing
+
+To populate the 30 sectors, the AI should frame concepts around childhood play and everyday activities rather than adult jobs.
+
+The AI should draw inspiration from pediatric iconographic inventories, utilizing simple drawings of concrete job-related activities or hobbies that elementary students aged 8 to 13 can easily understand without abstract reasoning.  
+
+4. The 60% Adaptive Filtering Algorithm
+
+The system must utilize a multi-layer adaptive filtering algorithm to narrow down the child's strengths without causing demand avoidance.
+
+The mathematical progression is strictly set to advance the top 60% of engaged sectors layer by layer.
+
+Layer 1: Assess all 30 sectors using low-friction, rapid multimodal interactions.
+
+Layer 2: Advance the top 18 sectors.
+
+Layer 3: Advance the top 11 sectors.
+
+Layer 4: Advance the top 7 sectors.
+
+Layer 5: Advance the top 4 sectors.
+
+Layers 6 through 10: The system stops eliminating topics and instead deep-dives into the final 2 to 4 niches, gradually increasing the cognitive complexity of the tasks to identify the child's most profound hyper-fixations and cognitive strengths.
+
+Just copy everything between the lines above and save it into your .cursorrules file. This acts as the master instruction manual for Cursor, ensuring the AI knows exactly what to build without needing external links or a static question database.

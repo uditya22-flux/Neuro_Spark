@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/deepening_controller.dart';
+import '../../dashboard/providers/sdui_controller.dart';
 import 'widgets/calendar_genius_task_widget.dart';
 import 'widgets/constellation_mapper_task_widget.dart';
 import 'widgets/choice_pattern_task_widget.dart';
-import '../../dashboard/providers/sdui_controller.dart';
 
 class DeepeningFunnelCanvas extends ConsumerStatefulWidget {
   final String userId;
@@ -46,7 +46,6 @@ class _DeepeningFunnelCanvasState extends ConsumerState<DeepeningFunnelCanvas> {
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(deepeningControllerProvider);
-    final sduiProfile = ref.watch(sduiControllerProvider).profile;
     final controller = ref.read(deepeningControllerProvider.notifier);
 
     if (state.isFunnelCompleted) {
@@ -97,7 +96,8 @@ class _DeepeningFunnelCanvasState extends ConsumerState<DeepeningFunnelCanvas> {
     }
 
     final task = state.currentTask;
-    final skin = task?.themeSkin ?? sduiProfile?.themeSkin ?? 'cosmic_space';
+    final String skin = task?.themeSkin ??
+        ref.watch(sduiControllerProvider.select((s) => s.themeSkin));
     final bgColor = _getSkinBackgroundColor(skin);
 
     return Scaffold(
