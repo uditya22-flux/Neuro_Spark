@@ -6,6 +6,7 @@ import '../../../services/modality_router.dart';
 import '../../../services/strength_funnel_progress_service.dart';
 import '../data/strength_funnel_math.dart';
 import '../models/layer1_sector_task.dart';
+import '../models/strength_funnel_finalists.dart';
 import '../models/strength_funnel_progress.dart';
 
 class StrengthFunnelState {
@@ -298,6 +299,16 @@ class StrengthFunnelController extends StateNotifier<StrengthFunnelState> {
   }
 
   Future<void> clearProgress() => _progressService.clear();
+
+  Future<void> persistFinalists(List<String> sectorIds) async {
+    await _progressService.saveFinalists(
+      StrengthFunnelFinalists(
+        sectorIds: sectorIds,
+        completedAt: DateTime.now().toUtc(),
+        layerScores: Map<String, double>.from(state.scores),
+      ),
+    );
+  }
 
   Future<void> _persistInLayerProgress() async {
     final sessionId = state.sessionId;

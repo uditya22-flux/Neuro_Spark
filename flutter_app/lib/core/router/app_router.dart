@@ -12,6 +12,7 @@ import '../../features/deepening/presentation/deepening_funnel_canvas.dart';
 
 import '../../features/sandbox/presentation/engine4_sandbox_screen.dart';
 
+import '../../features/strength_funnel/presentation/guardian_strength_summary_screen.dart';
 import '../../features/strength_funnel/presentation/layer1_sector_prompt_widget.dart';
 import '../../features/strength_funnel/providers/strength_funnel_controller.dart';
 
@@ -23,24 +24,22 @@ import '../../services/intake_application_service.dart';
 
 import '../../services/intake_persistence_service.dart';
 
+import '../../services/strength_funnel_progress_service.dart';
 
+import '../auth/auth_user_id.dart';
+
+AuthUserStatus _defaultAuthStatus() {
+  return AuthUserStatus(
+    isLoggedIn: true,
+    userId: resolveGuardianUserId(),
+    hasCompletedIntake: false,
+    hasCompletedStrengthFunnel: false,
+    hasCompletedAssessment: false,
+  );
+}
 
 final authStatusProvider = StateProvider<AuthUserStatus>((ref) {
-
-  return const AuthUserStatus(
-
-    isLoggedIn: true,
-
-    userId: 'user_guardian_101',
-
-    hasCompletedIntake: false,
-
-    hasCompletedStrengthFunnel: false,
-
-    hasCompletedAssessment: false,
-
-  );
-
+  return _defaultAuthStatus();
 });
 
 
@@ -131,7 +130,9 @@ final routerProvider = Provider<GoRouter>((ref) {
 
           !authStatus.hasCompletedStrengthFunnel &&
 
-          state.matchedLocation != '/strength-funnel') {
+          state.matchedLocation != '/strength-funnel' &&
+
+          state.matchedLocation != '/strength-summary') {
 
         return '/strength-funnel';
 
@@ -192,36 +193,121 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: '/strength-funnel',
 
         builder: (context, state) {
-
-          final userId = authStatus.userId;
-
           return StrengthFunnelScreen(
 
             onFunnelPhaseComplete: () async {
 
+              final funnelState = ref.read(strengthFunnelControllerProvider);
+
+              await ref
+
+                  .read(strengthFunnelControllerProvider.notifier)
+
+                  .persistFinalists(funnelState.finalistSectorIds);
+
               await ref.read(strengthFunnelControllerProvider.notifier).clearProgress();
-
-              await ref.read(intakePersistenceServiceProvider).markStrengthFunnelComplete();
-
-              ref.read(authStatusProvider.notifier).state = AuthUserStatus(
-
-                isLoggedIn: true,
-
-                userId: userId,
-
-                hasCompletedIntake: true,
-
-                hasCompletedStrengthFunnel: true,
-
-                hasCompletedAssessment: false,
-
-              );
 
               if (context.mounted) {
 
-                context.go('/assessment-canvas');
+                context.go('/strength-summary');
 
               }
+
+            },
+
+          );
+
+        },
+
+      ),
+
+      GoRoute(
+
+        path: '/strength-summary',
+
+        builder: (context, state) {
+
+          final userId = authStatus.userId;
+
+          return Consumer(
+
+            builder: (context, ref, _) {
+
+              final finalistsAsync = ref.watch(strengthFunnelFinalistsProvider);
+
+              return finalistsAsync.when(
+
+                loading: () => const Scaffold(
+
+                  body: Center(child: CircularProgressIndicator()),
+
+                ),
+
+                error: (_, __) => const Scaffold(
+
+                  body: Center(child: Text('Could not load play theme summary.')),
+
+                ),
+
+                data: (finalists) {
+
+                  if (finalists == null || finalists.sectorIds.isEmpty) {
+
+                    WidgetsBinding.instance.addPostFrameCallback((_) {
+
+                      if (context.mounted) context.go('/strength-funnel');
+
+                    });
+
+                    return const SizedBox.shrink();
+
+                  }
+
+                  return GuardianStrengthSummaryScreen(
+
+                    finalists: finalists,
+
+                    onContinue: () async {
+
+                      await ref
+
+                          .read(strengthFunnelProgressServiceProvider)
+
+                          .clearFinalists();
+
+                      await ref
+
+                          .read(intakePersistenceServiceProvider)
+
+                          .markStrengthFunnelComplete();
+
+                      ref.read(authStatusProvider.notifier).state = AuthUserStatus(
+
+                        isLoggedIn: true,
+
+                        userId: userId,
+
+                        hasCompletedIntake: true,
+
+                        hasCompletedStrengthFunnel: true,
+
+                        hasCompletedAssessment: false,
+
+                      );
+
+                      if (context.mounted) {
+
+                        context.go('/assessment-canvas');
+
+                      }
+
+                    },
+
+                  );
+
+                },
+
+              );
 
             },
 

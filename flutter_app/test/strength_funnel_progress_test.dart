@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mindbridge_app/features/strength_funnel/data/strength_funnel_math.dart';
+import 'package:mindbridge_app/features/strength_funnel/models/strength_funnel_finalists.dart';
 import 'package:mindbridge_app/features/strength_funnel/models/strength_funnel_progress.dart';
 import 'package:mindbridge_app/services/strength_funnel_progress_service.dart';
 
@@ -53,6 +54,16 @@ void main() {
       final restored = decodeStrengthFunnelProgressJson(raw);
       expect(restored.completedSectorIds, ['sector_a']);
       expect(restored.layerScores['sector_a'], 0.9);
+    });
+    test('finalists JSON round-trip', () {
+      final finalists = StrengthFunnelFinalists(
+        sectorIds: const ['r_build_fix', 'a_drawing_color'],
+        completedAt: DateTime.utc(2026, 8, 24),
+        layerScores: const {'r_build_fix': 0.9},
+      );
+      final restored = StrengthFunnelFinalists.fromJson(finalists.toJson());
+      expect(restored.sectorIds.length, 2);
+      expect(restored.layerScores['r_build_fix'], 0.9);
     });
   });
 }
