@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../../strength_funnel/presentation/widgets/sector_picture_widget.dart';
 import '../../models/child_play_activity.dart';
 
 /// Always-visible child safety controls — pause, skip, stop. No scores or streaks.
@@ -120,12 +121,10 @@ class ChildPlayPictureCard extends StatelessWidget {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(activity.icon, size: 72, color: theme.colorScheme.primary),
-          const SizedBox(height: 12),
-          Text(
-            activity.activityLabel,
-            style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
-            textAlign: TextAlign.center,
+          SectorPictureWidget(
+            sectorId: activity.sectorId,
+            activityLabel: activity.activityLabel,
+            height: 180,
           ),
           const SizedBox(height: 8),
           Text(

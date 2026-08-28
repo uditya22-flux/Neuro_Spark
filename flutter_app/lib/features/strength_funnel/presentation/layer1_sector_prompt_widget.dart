@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -8,6 +9,7 @@ import '../data/strength_funnel_math.dart';
 import '../models/layer1_sector_task.dart';
 import '../models/riasec_sector.dart';
 import '../providers/strength_funnel_controller.dart';
+import 'widgets/sector_picture_widget.dart';
 
 /// Layer 1 sector prompt renderer — modality chosen by ISAA routing engine.
 class Layer1SectorPromptWidget extends StatefulWidget {
@@ -128,31 +130,9 @@ class _PictureModalityView extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Container(
-          width: double.infinity,
-          height: 160,
-          decoration: BoxDecoration(
-            color: theme.colorScheme.primary.withValues(alpha: 0.08),
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: theme.colorScheme.primary.withValues(alpha: 0.2)),
-          ),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(Icons.construction_rounded, size: 56, color: theme.colorScheme.primary),
-              const SizedBox(height: 8),
-              Text(task.activityLabel, style: theme.textTheme.titleMedium),
-              const SizedBox(height: 4),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: Text(
-                  task.pictureDescription,
-                  textAlign: TextAlign.center,
-                  style: theme.textTheme.bodySmall,
-                ),
-              ),
-            ],
-          ),
+        SectorPictureWidget(
+          sectorId: task.sectorId,
+          activityLabel: task.activityLabel,
         ),
         if (constraints.useSimpleConcreteDrawings) ...[
           const SizedBox(height: 8),
@@ -379,11 +359,13 @@ class _StrengthFunnelScreenState extends ConsumerState<StrengthFunnelScreen> {
                                   'How much fun is this activity right now?',
                                   style: Theme.of(context).textTheme.bodyMedium,
                                 ),
-                                const SizedBox(height: 12),
-                                _RoutingDebugCard(
-                                  constraints: constraints,
-                                  modality: task.rendererModality,
-                                ),
+                                if (kDebugMode) ...[
+                                  const SizedBox(height: 12),
+                                  _RoutingDebugCard(
+                                    constraints: constraints,
+                                    modality: task.rendererModality,
+                                  ),
+                                ],
                                 const SizedBox(height: 16),
                                 Layer1SectorPromptWidget(
                                   task: task,

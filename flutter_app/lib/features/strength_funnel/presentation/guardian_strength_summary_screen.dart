@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../providers/game_environment_provider.dart';
+import '../../../services/remote_strength_funnel_loader.dart';
 import '../data/sector_template_catalog.dart';
 import '../models/riasec_sector.dart';
 import '../models/strength_funnel_finalists.dart';
@@ -148,6 +149,14 @@ class _FinalistCard extends StatelessWidget {
   }
 }
 
-final strengthFunnelFinalistsProvider = FutureProvider<StrengthFunnelFinalists?>((ref) {
+final strengthFunnelFinalistsProvider = FutureProvider<StrengthFunnelFinalists?>((ref) async {
+  final childId = ref.watch(gameEnvironmentProvider)?.childId;
+  if (childId != null) {
+    final remote = await ref.watch(remoteStrengthFunnelLoaderProvider).loadFinalistsForChild(childId);
+    if (remote != null) {
+      await ref.watch(strengthFunnelProgressServiceProvider).saveFinalists(remote);
+      return remote;
+    }
+  }
   return ref.watch(strengthFunnelProgressServiceProvider).loadFinalists();
 });

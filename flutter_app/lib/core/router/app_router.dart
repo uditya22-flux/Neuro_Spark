@@ -423,17 +423,43 @@ final routerProvider = Provider<GoRouter>((ref) {
 
         builder: (context, state) {
 
-          return ChildPlaySessionScreen(
+          return Consumer(
 
-            onSessionEnded: () async {
+            builder: (context, ref, _) {
 
-              await ref.read(childPlaySessionControllerProvider.notifier).stop();
+              final playState = ref.watch(childPlaySessionControllerProvider);
 
-              if (context.mounted) {
+              if (playState.sessionId == null && !playState.loading && !playState.completed) {
 
-                context.go('/dashboard');
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+
+                  if (context.mounted) context.go('/dashboard');
+
+                });
+
+                return const Scaffold(
+
+                  body: Center(child: CircularProgressIndicator()),
+
+                );
 
               }
+
+              return ChildPlaySessionScreen(
+
+                onSessionEnded: () async {
+
+                  await ref.read(childPlaySessionControllerProvider.notifier).stop();
+
+                  if (context.mounted) {
+
+                    context.go('/dashboard');
+
+                  }
+
+                },
+
+              );
 
             },
 
@@ -451,33 +477,71 @@ final routerProvider = Provider<GoRouter>((ref) {
 
           final userId = authStatus.userId;
 
-          return DeepeningFunnelCanvas(
+          return Consumer(
 
-            userId: userId,
+            builder: (context, ref, _) {
 
-            onCompleted: () async {
+              final childId = ref.watch(gameEnvironmentProvider)?.childId;
 
-              await ref.read(intakePersistenceServiceProvider).markAssessmentComplete();
+              if (childId == null) {
 
-              ref.read(authStatusProvider.notifier).state = AuthUserStatus(
+                return Scaffold(
 
-                isLoggedIn: true,
+                  appBar: AppBar(title: const Text('Strength activities')),
 
-                userId: userId,
+                  body: const Center(
 
-                hasCompletedIntake: true,
+                    child: Padding(
 
-                hasCompletedStrengthFunnel: true,
+                      padding: EdgeInsets.all(24),
 
-                hasCompletedAssessment: true,
+                      child: Text(
 
-              );
+                        'Complete intake first to link your child profile before deeper activities.',
 
-              if (context.mounted) {
+                        textAlign: TextAlign.center,
 
-                context.go('/dashboard');
+                      ),
+
+                    ),
+
+                  ),
+
+                );
 
               }
+
+              return DeepeningFunnelCanvas(
+
+                userId: childId,
+
+                onCompleted: () async {
+
+                  await ref.read(intakePersistenceServiceProvider).markAssessmentComplete();
+
+                  ref.read(authStatusProvider.notifier).state = AuthUserStatus(
+
+                    isLoggedIn: true,
+
+                    userId: userId,
+
+                    hasCompletedIntake: true,
+
+                    hasCompletedStrengthFunnel: true,
+
+                    hasCompletedAssessment: true,
+
+                  );
+
+                  if (context.mounted) {
+
+                    context.go('/dashboard');
+
+                  }
+
+                },
+
+              );
 
             },
 

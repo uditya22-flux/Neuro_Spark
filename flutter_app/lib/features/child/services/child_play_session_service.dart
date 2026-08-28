@@ -7,6 +7,7 @@ import '../../guardian/data/session_repository.dart';
 import '../../strength_funnel/models/strength_funnel_finalists.dart';
 import '../data/child_play_session_builder.dart';
 import '../models/child_play_activity.dart';
+import 'child_play_telemetry_service.dart';
 
 class ChildPlayLaunchResult {
   const ChildPlayLaunchResult({
@@ -21,10 +22,14 @@ class ChildPlayLaunchResult {
 }
 
 class ChildPlaySessionService {
-  ChildPlaySessionService({SessionRepository? sessions})
-      : _sessions = sessions ?? SupabaseSessionRepository();
+  ChildPlaySessionService({
+    SessionRepository? sessions,
+    ChildPlayTelemetryService? telemetry,
+  })  : _sessions = sessions ?? SupabaseSessionRepository(),
+        _telemetry = telemetry ?? ChildPlayTelemetryService();
 
   final SessionRepository _sessions;
+  final ChildPlayTelemetryService _telemetry;
 
   bool get _canIssueRemote {
     try {
@@ -76,6 +81,21 @@ class ChildPlaySessionService {
     } catch (e) {
       debugPrint('[ChildPlaySession] revoke-session: $e');
     }
+  }
+
+  Future<void> recordEnjoyment({
+    required String sessionId,
+    required String childId,
+    required String sectorId,
+    bool skipped = false,
+  }) {
+    return _telemetry.recordResponse(
+      sessionId: sessionId,
+      childId: childId,
+      sectorId: sectorId,
+      enjoyed: !skipped,
+      skipped: skipped,
+    );
   }
 }
 

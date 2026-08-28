@@ -56,6 +56,7 @@ class ChildPlaySessionController extends StateNotifier<ChildPlaySessionState> {
   ChildPlaySessionController(this._service) : super(const ChildPlaySessionState());
 
   final ChildPlaySessionService _service;
+  String? _childId;
 
   Future<void> start({
     required IntakeSessionBundle bundle,
@@ -64,6 +65,7 @@ class ChildPlaySessionController extends StateNotifier<ChildPlaySessionState> {
     state = state.copyWith(loading: true, error: null, completed: false, paused: false);
     try {
       final launch = await _service.launch(bundle: bundle, finalists: finalists);
+      _childId = bundle.childId;
       state = ChildPlaySessionState(
         sessionId: launch.sessionId,
         activities: launch.activities,
@@ -78,7 +80,15 @@ class ChildPlaySessionController extends StateNotifier<ChildPlaySessionState> {
     state = state.copyWith(paused: !state.paused);
   }
 
-  void skip() {
+  void skip() => _advance(recordSkipped: true);
+
+  void markExplored() {
+    _recordCurrent(skipped: false);
+    _advance(recordSkipped: false);
+  }
+
+  void _advance({required bool recordSkipped}) {
+    if (recordSkipped) _recordCurrent(skipped: true);
     if (state.hasNext) {
       state = state.copyWith(currentIndex: state.currentIndex + 1, paused: false);
     } else {
@@ -86,8 +96,17 @@ class ChildPlaySessionController extends StateNotifier<ChildPlaySessionState> {
     }
   }
 
-  void markExplored() {
-    skip();
+  void _recordCurrent({required bool skipped}) {
+    final activity = state.currentActivity;
+    final sessionId = state.sessionId;
+    final childId = _childId;
+    if (activity == null || sessionId == null || childId == null) return;
+    _service.recordEnjoyment(
+      sessionId: sessionId,
+      childId: childId,
+      sectorId: activity.sectorId,
+      skipped: skipped,
+    );
   }
 
   Future<void> stop() async {
@@ -96,6 +115,7 @@ class ChildPlaySessionController extends StateNotifier<ChildPlaySessionState> {
       await _service.endSession(sessionId);
     }
     state = const ChildPlaySessionState();
+    _childId = null;
   }
 }
 

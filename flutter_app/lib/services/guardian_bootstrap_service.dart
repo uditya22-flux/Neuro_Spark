@@ -11,7 +11,6 @@ class GuardianBootstrapService {
     if (userId == null) return;
 
     await _ensureVerified(userId, verificationMethod);
-    await _ensureActiveConsent(userId);
   }
 
   Future<void> _ensureVerified(String userId, String method) async {

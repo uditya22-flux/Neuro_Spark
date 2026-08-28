@@ -48,6 +48,33 @@ class _DeepeningFunnelCanvasState extends ConsumerState<DeepeningFunnelCanvas> {
     final state = ref.watch(deepeningControllerProvider);
     final controller = ref.read(deepeningControllerProvider.notifier);
 
+    if (state.errorMessage != null &&
+        state.errorMessage!.isNotEmpty &&
+        !state.isLoading &&
+        state.currentTask == null) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('Strength activities')),
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.cloud_off_rounded, size: 56, color: Theme.of(context).colorScheme.error),
+                const SizedBox(height: 16),
+                Text(state.errorMessage!, textAlign: TextAlign.center),
+                const SizedBox(height: 20),
+                FilledButton(
+                  onPressed: () => controller.fetchNextTask(widget.userId),
+                  child: const Text('Try again'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
     if (state.isFunnelCompleted) {
       return Scaffold(
         body: SafeArea(

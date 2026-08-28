@@ -10,6 +10,7 @@ import 'generative_ui_console.dart';
 import '../providers/dashboard_controller.dart';
 import 'swapped_elements.dart';
 import '../../child/presentation/guardian_play_launch_card.dart';
+import '../../child/presentation/guardian_play_themes_card.dart';
 
 class NeuroSparkDashboard extends ConsumerStatefulWidget {
   const NeuroSparkDashboard({super.key});
@@ -94,12 +95,18 @@ class _NeuroSparkDashboardState extends ConsumerState<NeuroSparkDashboard> {
                       child: ListView.builder(
                         key: ValueKey(sduiState.activeProfileName),
                         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                        itemCount: widgetIds.length + 1,
+                        itemCount: widgetIds.length + 2,
                         itemBuilder: (context, index) {
                           if (index == 0) {
-                            return const GuardianPlayLaunchCard();
+                            return const GuardianPlayThemesCard();
                           }
-                          final componentKey = widgetIds[index - 1];
+                          if (index == 1) {
+                            return const Padding(
+                              padding: EdgeInsets.only(bottom: 12),
+                              child: GuardianPlayLaunchCard(),
+                            );
+                          }
+                          final componentKey = widgetIds[index - 2];
                           Widget widget;
                           switch (componentKey) {
                             case 'header':
