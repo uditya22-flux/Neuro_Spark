@@ -135,15 +135,34 @@ class _PictureModalityView extends StatelessWidget {
           sectorId: task.sectorId,
           activityLabel: task.activityLabel,
         ),
-        if (constraints.useSimpleConcreteDrawings) ...[
-          const SizedBox(height: 8),
-          Text(
-            'Simple concrete drawing — no faces, no clutter.',
-            style: theme.textTheme.labelSmall?.copyWith(
-              color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
-            ),
-          ),
-        ],
+            if (constraints.useSimpleConcreteDrawings) ...[
+              const SizedBox(height: 8),
+              Text(
+                'Simple concrete drawing — no faces, no clutter.',
+                style: theme.textTheme.labelSmall?.copyWith(
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                ),
+              ),
+            ],
+            if (task.provenanceFramework != null) ...[
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 6,
+                runSpacing: 4,
+                children: [
+                  Chip(
+                    label: Text(task.provenanceFramework!, style: theme.textTheme.labelSmall),
+                    visualDensity: VisualDensity.compact,
+                  ),
+                  if (task.personalizationReason != null)
+                    Chip(
+                      avatar: Icon(Icons.person_outline, size: 14, color: theme.colorScheme.primary),
+                      label: Text(task.personalizationReason!, style: theme.textTheme.labelSmall),
+                      visualDensity: VisualDensity.compact,
+                    ),
+                ],
+              ),
+            ],
         if (!constraints.allowText) ...[
           const SizedBox(height: 12),
           Row(

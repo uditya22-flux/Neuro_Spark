@@ -183,6 +183,7 @@ class StrengthFunnelController extends StateNotifier<StrengthFunnelState> {
           layerNumber: layerNumber,
           sessionId: existingSession,
           advancingSectorIds: advancingSectorIds,
+          priorEngagement: state.scores,
         );
       } else {
         result = await _repository.startLayer(
@@ -191,6 +192,24 @@ class StrengthFunnelController extends StateNotifier<StrengthFunnelState> {
           sessionId: existingSession,
         );
       }
+
+      final personalizedTasks = _repository.personalizeTasks(
+        bundle: bundle,
+        tasks: result.tasks,
+        layerNumber: result.layerNumber,
+        priorEngagement: state.scores,
+      );
+
+      result = StrengthFunnelStartResult(
+        sessionId: result.sessionId,
+        layerRunId: result.layerRunId,
+        layerNumber: result.layerNumber,
+        totalSectors: result.totalSectors,
+        constraints: result.constraints,
+        tasks: personalizedTasks,
+        completedSectorIds: result.completedSectorIds,
+        remote: result.remote,
+      );
 
       final completed = Set<String>.from(result.completedSectorIds);
       var startIndex = 0;

@@ -1,21 +1,25 @@
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-import '../features/strength_funnel/data/sector_template_catalog.dart';
+import '../core/config/demo_config.dart';
 import '../features/strength_funnel/data/strength_funnel_math.dart';
 import '../features/strength_funnel/models/layer1_sector_task.dart';
 import '../features/strength_funnel/models/riasec_sector.dart';
-import '../core/config/demo_config.dart';
+import '../features/strength_funnel/services/sector_prompt_personalizer.dart';
 import '../models/intake_models.dart';
 import '../providers/game_environment_provider.dart';
 import '../services/modality_router.dart';
 
 /// Remote + local fallback for multi-layer RIASEC strength funnel sessions.
 class StrengthFunnelRepository {
-  const StrengthFunnelRepository({ModalityRouter? router})
-      : _router = router ?? const ModalityRouter();
+  const StrengthFunnelRepository({
+    ModalityRouter? router,
+    SectorPromptPersonalizer? personalizer,
+  })  : _router = router ?? const ModalityRouter(),
+        _personalizer = personalizer ?? const SectorPromptPersonalizer();
 
   final ModalityRouter _router;
+  final SectorPromptPersonalizer _personalizer;
 
   SupabaseClient? get _client {
     try {
@@ -119,6 +123,7 @@ class StrengthFunnelRepository {
     required int layerNumber,
     String? sessionId,
     List<String>? sectorIds,
+    Map<String, double> priorEngagement = const {},
   }) {
     final constraints = _router.routeFromIsaa(bundle.clinical, bundle.parent);
     final modality = _router.resolveRendererModality(constraints);
@@ -135,19 +140,24 @@ class StrengthFunnelRepository {
       if (sector == null) {
         throw StateError('Unknown sector $id');
       }
-      final sample = templateForSector(sector);
-      final prompt = sample.promptForLayer(layerNumber);
-      _router.assertPresentMomentFraming(prompt);
+      final personalized = _personalizer.resolve(
+        sector: sector,
+        bundle: bundle,
+        layer: layerNumber,
+        priorEngagement: priorEngagement,
+      );
       return Layer1SectorTask(
         sectorId: sector.id,
         displayName: sector.displayName,
-        presentMomentPrompt: prompt,
-        activityLabel: sample.activityLabel,
-        pictureDescription: sample.pictureDescription,
+        presentMomentPrompt: personalized.presentMomentPrompt,
+        activityLabel: personalized.activityLabel,
+        pictureDescription: personalized.pictureDescription,
         videoDescription: 'Silent activity loop with no background music.',
         rendererModality: modality,
         minEnjoymentLabel: 'Not fun right now',
         maxEnjoymentLabel: 'Really fun right now',
+        provenanceFramework: personalized.provenanceFramework,
+        personalizationReason: personalized.personalizationReason,
       );
     }).toList();
 
@@ -168,12 +178,14 @@ class StrengthFunnelRepository {
     required int layerNumber,
     required String sessionId,
     required List<String> advancingSectorIds,
+    Map<String, double> priorEngagement = const {},
   }) {
     return _startLocal(
       bundle,
       layerNumber: layerNumber,
       sessionId: sessionId,
       sectorIds: advancingSectorIds,
+      priorEngagement: priorEngagement,
     );
   }
 
@@ -182,6 +194,32 @@ class StrengthFunnelRepository {
         ? DemoConfig.advancingCount(scores.length)
         : sectorsAdvancingAfterLayer(layerNumber);
     return selectAdvancingSectors(scores, advanceCount);
+  }
+
+  /// Re-personalizes remote tasks using the child's intake profile and usage.
+  List<Layer1SectorTask> personalizeTasks({
+    required IntakeSessionBundle bundle,
+    required List<Layer1SectorTask> tasks,
+    required int layerNumber,
+    Map<String, double> priorEngagement = const {},
+  }) {
+    return tasks.map((task) {
+      final sector = sectorById(task.sectorId);
+      if (sector == null) return task;
+      final personalized = _personalizer.resolve(
+        sector: sector,
+        bundle: bundle,
+        layer: layerNumber,
+        priorEngagement: priorEngagement,
+      );
+      return task.copyWith(
+        presentMomentPrompt: personalized.presentMomentPrompt,
+        activityLabel: personalized.activityLabel,
+        pictureDescription: personalized.pictureDescription,
+        provenanceFramework: personalized.provenanceFramework,
+        personalizationReason: personalized.personalizationReason,
+      );
+    }).toList();
   }
 
   Map<String, dynamic> _isaaPayload(

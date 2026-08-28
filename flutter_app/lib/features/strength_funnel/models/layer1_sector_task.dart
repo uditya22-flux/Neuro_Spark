@@ -10,6 +10,8 @@ class Layer1SectorTask {
     required this.rendererModality,
     required this.minEnjoymentLabel,
     required this.maxEnjoymentLabel,
+    this.provenanceFramework,
+    this.personalizationReason,
   });
 
   final String sectorId;
@@ -21,6 +23,30 @@ class Layer1SectorTask {
   final String rendererModality;
   final String minEnjoymentLabel;
   final String maxEnjoymentLabel;
+  final String? provenanceFramework;
+  final String? personalizationReason;
+
+  Layer1SectorTask copyWith({
+    String? presentMomentPrompt,
+    String? activityLabel,
+    String? pictureDescription,
+    String? provenanceFramework,
+    String? personalizationReason,
+  }) {
+    return Layer1SectorTask(
+      sectorId: sectorId,
+      displayName: displayName,
+      presentMomentPrompt: presentMomentPrompt ?? this.presentMomentPrompt,
+      activityLabel: activityLabel ?? this.activityLabel,
+      pictureDescription: pictureDescription ?? this.pictureDescription,
+      videoDescription: videoDescription,
+      rendererModality: rendererModality,
+      minEnjoymentLabel: minEnjoymentLabel,
+      maxEnjoymentLabel: maxEnjoymentLabel,
+      provenanceFramework: provenanceFramework ?? this.provenanceFramework,
+      personalizationReason: personalizationReason ?? this.personalizationReason,
+    );
+  }
 
   factory Layer1SectorTask.sampleRealistic({
     required String rendererModality,
