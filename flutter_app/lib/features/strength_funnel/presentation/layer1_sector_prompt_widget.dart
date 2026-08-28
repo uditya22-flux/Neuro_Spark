@@ -144,7 +144,31 @@ class _PictureModalityView extends StatelessWidget {
                 ),
               ),
             ],
-            if (task.provenanceFramework != null) ...[
+            if (task.citationShort != null) ...[
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 6,
+                runSpacing: 4,
+                children: [
+                  Chip(
+                    label: Text('${task.citationShort} · ${task.provenanceFramework?.split(' · ').first ?? 'Research'}',
+                        style: theme.textTheme.labelSmall),
+                    visualDensity: VisualDensity.compact,
+                  ),
+                  if (task.constructDomain != null)
+                    Chip(
+                      label: Text(task.constructDomain!, style: theme.textTheme.labelSmall),
+                      visualDensity: VisualDensity.compact,
+                    ),
+                  if (task.personalizationReason != null)
+                    Chip(
+                      avatar: Icon(Icons.person_outline, size: 14, color: theme.colorScheme.primary),
+                      label: Text(task.personalizationReason!, style: theme.textTheme.labelSmall),
+                      visualDensity: VisualDensity.compact,
+                    ),
+                ],
+              ),
+            ] else if (task.provenanceFramework != null) ...[
               const SizedBox(height: 8),
               Wrap(
                 spacing: 6,

@@ -12,6 +12,9 @@ class Layer1SectorTask {
     required this.maxEnjoymentLabel,
     this.provenanceFramework,
     this.personalizationReason,
+    this.researchStemId,
+    this.constructDomain,
+    this.citationShort,
   });
 
   final String sectorId;
@@ -25,6 +28,9 @@ class Layer1SectorTask {
   final String maxEnjoymentLabel;
   final String? provenanceFramework;
   final String? personalizationReason;
+  final String? researchStemId;
+  final String? constructDomain;
+  final String? citationShort;
 
   Layer1SectorTask copyWith({
     String? presentMomentPrompt,
@@ -32,6 +38,9 @@ class Layer1SectorTask {
     String? pictureDescription,
     String? provenanceFramework,
     String? personalizationReason,
+    String? researchStemId,
+    String? constructDomain,
+    String? citationShort,
   }) {
     return Layer1SectorTask(
       sectorId: sectorId,
@@ -45,6 +54,9 @@ class Layer1SectorTask {
       maxEnjoymentLabel: maxEnjoymentLabel,
       provenanceFramework: provenanceFramework ?? this.provenanceFramework,
       personalizationReason: personalizationReason ?? this.personalizationReason,
+      researchStemId: researchStemId ?? this.researchStemId,
+      constructDomain: constructDomain ?? this.constructDomain,
+      citationShort: citationShort ?? this.citationShort,
     );
   }
 

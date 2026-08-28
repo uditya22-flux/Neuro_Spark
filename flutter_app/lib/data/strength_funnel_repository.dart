@@ -158,6 +158,9 @@ class StrengthFunnelRepository {
         maxEnjoymentLabel: 'Really fun right now',
         provenanceFramework: personalized.provenanceFramework,
         personalizationReason: personalized.personalizationReason,
+        researchStemId: personalized.researchStemId,
+        constructDomain: personalized.constructDomain,
+        citationShort: personalized.citationShort,
       );
     }).toList();
 
@@ -218,6 +221,9 @@ class StrengthFunnelRepository {
         pictureDescription: personalized.pictureDescription,
         provenanceFramework: personalized.provenanceFramework,
         personalizationReason: personalized.personalizationReason,
+        researchStemId: personalized.researchStemId,
+        constructDomain: personalized.constructDomain,
+        citationShort: personalized.citationShort,
       );
     }).toList();
   }

@@ -30,10 +30,8 @@ void main() {
       final sector = sectorById('r_vehicles_machines')!;
       final result = personalizer.resolve(sector: sector, bundle: bundle, layer: 1);
 
-      expect(
-        result.activityLabel.toLowerCase(),
-        anyOf(contains('train'), contains('car'), contains('wheel')),
-      );
+      expect(result.researchStemId, startsWith('cape_'));
+      expect(result.citationShort, 'King et al., 2007');
       expect(result.personalizationReason, contains('hyperfixation'));
     });
 

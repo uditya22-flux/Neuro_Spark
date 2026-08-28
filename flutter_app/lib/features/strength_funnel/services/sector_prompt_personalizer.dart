@@ -2,6 +2,7 @@ import '../../../models/intake_models.dart';
 import '../../../providers/game_environment_provider.dart';
 import '../../../services/modality_router.dart';
 import '../data/clinical_activity_bank.dart';
+import '../data/research_activity_registry.dart';
 import '../data/sector_template_catalog.dart';
 import '../models/riasec_sector.dart';
 
@@ -15,6 +16,9 @@ class PersonalizedSectorPrompt {
     required this.pictureDescription,
     required this.provenanceFramework,
     required this.personalizationReason,
+    required this.researchStemId,
+    required this.constructDomain,
+    required this.citationShort,
   });
 
   final String presentMomentPrompt;
@@ -22,6 +26,9 @@ class PersonalizedSectorPrompt {
   final String pictureDescription;
   final String provenanceFramework;
   final String personalizationReason;
+  final String researchStemId;
+  final String constructDomain;
+  final String citationShort;
 }
 
 class SectorPromptPersonalizer {
@@ -84,8 +91,10 @@ class SectorPromptPersonalizer {
       }
     }
 
-    final base = best ??
-        _fallbackFromCatalog(sector);
+    final base = best;
+    if (base == null || base.stem == null) {
+      return _fallbackFromCatalog(sector, layer);
+    }
 
     var prompt = base.presentMomentPrompt;
     if (layer > 1 && layer < 6) {
@@ -112,17 +121,25 @@ class SectorPromptPersonalizer {
       pictureDescription: base.pictureDescription,
       provenanceFramework: base.provenanceFramework,
       personalizationReason: reason,
+      researchStemId: base.researchStemId,
+      constructDomain: base.constructDomain,
+      citationShort: base.citationShort,
     );
   }
 
-  ClinicalActivityVariant _fallbackFromCatalog(RiasecSector sector) {
+  PersonalizedSectorPrompt _fallbackFromCatalog(RiasecSector sector, int layer) {
     final sample = templateForSector(sector);
-    return ClinicalActivityVariant(
-      sectorId: sector.id,
-      presentMomentPrompt: sample.presentMomentPrompt,
+    var prompt = sample.promptForLayer(layer);
+    _router.assertPresentMomentFraming(prompt);
+    return PersonalizedSectorPrompt(
+      presentMomentPrompt: prompt,
       activityLabel: sample.activityLabel,
       pictureDescription: sample.pictureDescription,
-      provenanceFramework: 'RIASEC-${sector.riasecType}',
+      provenanceFramework: 'RIASEC · Holland, 1997',
+      personalizationReason: 'RIASEC play-theme fallback',
+      researchStemId: 'riasec_fallback',
+      constructDomain: sector.playTheme,
+      citationShort: 'Holland, 1997',
     );
   }
 }
