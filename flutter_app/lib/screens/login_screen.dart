@@ -6,6 +6,8 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../core/auth/auth_session_sync.dart';
 import '../core/auth/supabase_auth_repository.dart';
 import '../core/config/supabase_config.dart';
+import '../features/demo/presentation/demo_methodology_sheet.dart';
+import '../features/demo/services/demo_launch_service.dart';
 import '../services/guardian_bootstrap_service.dart';
 
 /// Guardian sign-in for local Supabase or hosted projects.
@@ -215,6 +217,26 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                       child: const Text('Send email OTP (local dev only)'),
                     ),
                   ],
+                  const SizedBox(height: 16),
+                  const Divider(),
+                  const SizedBox(height: 8),
+                  OutlinedButton.icon(
+                    onPressed: _busy
+                        ? null
+                        : () async {
+                            await DemoMethodologySheet.show(context);
+                            if (!context.mounted) return;
+                            await launchHospitalDemo(ref, context);
+                          },
+                    icon: const Icon(Icons.local_hospital_outlined),
+                    label: const Text('Hospital demo (8 min walkthrough)'),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'No sign-in needed. Synthetic child profile. Shortened 3-layer funnel.',
+                    style: Theme.of(context).textTheme.bodySmall,
+                    textAlign: TextAlign.center,
+                  ),
                 ],
               ),
             ),

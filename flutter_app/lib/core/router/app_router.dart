@@ -14,6 +14,8 @@ import '../../features/dashboard/widgets/neuro_spark_dashboard.dart';
 import '../../features/guardian/presentation/guardian_settings_screen.dart';
 import '../../providers/game_environment_provider.dart';
 
+import '../../features/demo/presentation/demo_mode_banner.dart';
+import '../../core/config/demo_config.dart';
 import '../../features/deepening/presentation/deepening_funnel_canvas.dart';
 
 import '../../features/sandbox/presentation/engine4_sandbox_screen.dart';
@@ -94,7 +96,10 @@ final routerProvider = Provider<GoRouter>((ref) {
 
   String initialLocation = '/intake';
 
-  if (authStatus.hasCompletedIntake) {
+  if (authStatus.userId == 'demo_guardian' && authStatus.hasCompletedIntake) {
+    initialLocation =
+        authStatus.hasCompletedStrengthFunnel ? '/dashboard' : '/demo-intro';
+  } else if (authStatus.hasCompletedIntake) {
 
     if (!authStatus.hasCompletedStrengthFunnel) {
 
@@ -126,10 +131,30 @@ final routerProvider = Provider<GoRouter>((ref) {
 
 
       if (authStatus.isLoggedIn && state.matchedLocation == '/login') {
-        return '/consent';
+        return authStatus.userId == 'demo_guardian' ? '/demo-intro' : '/consent';
       }
 
+      final isDemoSession = authStatus.userId == 'demo_guardian';
 
+      if (isDemoSession) {
+        const demoOpenPaths = {
+          '/demo-intro',
+          '/strength-funnel',
+          '/strength-summary',
+          '/guardian-handoff',
+          '/child-play',
+          '/dashboard',
+          '/assessment-canvas',
+          '/guardian-settings',
+        };
+        if (demoOpenPaths.contains(state.matchedLocation)) {
+          return null;
+        }
+        if (!authStatus.hasCompletedStrengthFunnel) {
+          return '/demo-intro';
+        }
+        return '/dashboard';
+      }
 
       const guardianOpenPaths = {
         '/consent',
@@ -195,6 +220,14 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: '/login',
 
         builder: (context, state) => const LoginScreen(),
+
+      ),
+
+      GoRoute(
+
+        path: '/demo-intro',
+
+        builder: (context, state) => const DemoIntroScreen(),
 
       ),
 

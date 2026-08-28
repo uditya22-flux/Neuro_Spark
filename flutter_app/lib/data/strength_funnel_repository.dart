@@ -5,6 +5,7 @@ import '../features/strength_funnel/data/sector_template_catalog.dart';
 import '../features/strength_funnel/data/strength_funnel_math.dart';
 import '../features/strength_funnel/models/layer1_sector_task.dart';
 import '../features/strength_funnel/models/riasec_sector.dart';
+import '../core/config/demo_config.dart';
 import '../models/intake_models.dart';
 import '../providers/game_environment_provider.dart';
 import '../services/modality_router.dart';
@@ -29,6 +30,10 @@ class StrengthFunnelRepository {
     required int layerNumber,
     String? sessionId,
   }) async {
+    if (DemoConfig.isActive) {
+      return _startLocal(bundle, layerNumber: layerNumber, sessionId: sessionId);
+    }
+
     final client = _client;
     final childId = bundle.childId ?? 'local_child';
     final isaaPayload = _isaaPayload(bundle.clinical, bundle.parent);
@@ -119,9 +124,11 @@ class StrengthFunnelRepository {
     final modality = _router.resolveRendererModality(constraints);
     final now = DateTime.now().millisecondsSinceEpoch;
     final activeIds = sectorIds ??
-        (layerNumber == 1
-            ? allRiasecSectorIds()
-            : allRiasecSectorIds().take(sectorsAdvancingAfterLayer(1)).toList());
+        (DemoConfig.isActive && layerNumber == 1
+            ? DemoConfig.representativeSectorIds
+            : layerNumber == 1
+                ? allRiasecSectorIds()
+                : allRiasecSectorIds().take(sectorsAdvancingAfterLayer(1)).toList());
 
     final tasks = activeIds.map((id) {
       final sector = sectorById(id);
@@ -171,7 +178,10 @@ class StrengthFunnelRepository {
   }
 
   List<String> computeAdvancingLocally(Map<String, double> scores, int layerNumber) {
-    return selectAdvancingSectors(scores, sectorsAdvancingAfterLayer(layerNumber));
+    final advanceCount = DemoConfig.isActive
+        ? DemoConfig.advancingCount(scores.length)
+        : sectorsAdvancingAfterLayer(layerNumber);
+    return selectAdvancingSectors(scores, advanceCount);
   }
 
   Map<String, dynamic> _isaaPayload(

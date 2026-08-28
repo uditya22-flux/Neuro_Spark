@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/theme/app_theme.dart';
+import '../../../core/config/demo_config.dart';
 import '../../../services/modality_router.dart';
 import '../data/strength_funnel_math.dart';
 import '../models/layer1_sector_task.dart';
@@ -316,6 +317,16 @@ class _StrengthFunnelScreenState extends ConsumerState<StrengthFunnelScreen> {
               ? 'Deep dive · Layer $layer'
               : 'Layer $layer · Strength Exploration',
         ),
+        actions: [
+          if (DemoConfig.isActive)
+            Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: Chip(
+                label: const Text('Demo'),
+                visualDensity: VisualDensity.compact,
+              ),
+            ),
+        ],
         bottom: funnel.totalTasks > 0
             ? PreferredSize(
                 preferredSize: const Size.fromHeight(4),
@@ -350,7 +361,7 @@ class _StrengthFunnelScreenState extends ConsumerState<StrengthFunnelScreen> {
                               padding: const EdgeInsets.all(20),
                               children: [
                                 Text(
-                                  'Layer $layer · ${sectorsAtLayerStart(layer)} play themes · '
+                                  'Layer $layer · ${funnel.totalTasks} play themes · '
                                   'sector ${funnel.scoredCount + 1} of ${funnel.totalTasks}',
                                   style: Theme.of(context).textTheme.labelLarge,
                                 ),

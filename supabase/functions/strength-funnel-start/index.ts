@@ -84,8 +84,6 @@ Deno.serve(async (req: Request): Promise<Response> => {
     const isaa = normalizeIsaaProfile(parseIsaa(body));
     const constraints = routeModalityFromIsaa(isaa);
     const modalityJson = constraintsToJson(constraints);
-    const useLlm = layerNumber >= 6 &&
-      Deno.env.get("STRENGTH_FUNNEL_LLM_ENABLED") === "true";
 
     const { data: isaaRow, error: isaaError } = await svc
       .from("child_isaa_profiles")
@@ -159,6 +157,9 @@ Deno.serve(async (req: Request): Promise<Response> => {
     const sessionId = String(session.id);
     const sessionLayer = Number(session.current_layer ?? 1);
     const layerNumber = parseLayerNumber(body, sessionLayer);
+
+    const useLlm = layerNumber >= 6 &&
+      Deno.env.get("STRENGTH_FUNNEL_LLM_ENABLED") === "true";
 
     if (layerNumber > sessionLayer) {
       return badRequest(

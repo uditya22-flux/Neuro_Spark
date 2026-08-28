@@ -10,6 +10,10 @@ import 'core/services/notification_service.dart';
 import 'models/intake_models.dart';
 import 'providers/game_environment_provider.dart';
 import 'core/router/app_router.dart';
+import 'core/config/demo_config.dart';
+import 'features/demo/presentation/demo_mode_banner.dart';
+import 'features/demo/data/demo_intake_bundle.dart';
+import 'features/demo/providers/demo_mode_provider.dart';
 import 'services/intake_persistence_service.dart';
 
 void main() async {
@@ -32,6 +36,19 @@ void main() async {
   await restorePersistedIntakeSession(container);
   await syncAuthSession(container);
   bindSupabaseAuthListener(container);
+
+  if (DemoConfig.compileTimeEnabled) {
+    DemoConfig.runtimeActive = true;
+    container.read(demoModeProvider.notifier).state = true;
+    container.read(gameEnvironmentProvider.notifier).set(buildDemoIntakeBundle());
+    container.read(authStatusProvider.notifier).state = const AuthUserStatus(
+      isLoggedIn: true,
+      userId: 'demo_guardian',
+      hasCompletedIntake: true,
+      hasCompletedStrengthFunnel: false,
+      hasCompletedAssessment: false,
+    );
+  }
 
   runApp(
     UncontrolledProviderScope(
@@ -59,6 +76,9 @@ class NeuroSparkApp extends ConsumerWidget {
       darkTheme: AppTheme.darkTheme,
       themeMode: preferDark ? ThemeMode.dark : ThemeMode.light,
       routerConfig: router,
+      builder: (context, child) => DemoModeBanner(
+        child: child ?? const SizedBox.shrink(),
+      ),
     );
   }
 }

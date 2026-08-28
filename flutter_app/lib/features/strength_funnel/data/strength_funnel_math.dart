@@ -1,5 +1,7 @@
 /// 60% filter math — mirrors `supabase/functions/_shared/strength_funnel.ts`.
 
+import '../../../core/config/demo_config.dart';
+
 const layerSectorTargets = <int, int>{
   1: 30,
   2: 18,
@@ -35,7 +37,8 @@ List<String> selectAdvancingSectors(
 }
 
 /// Full 10-layer funnel (5 elimination + 5 deep-dive) before deepening assessment.
-const kStrengthFunnelBetaExitLayer = 10;
+/// Demo mode shortens to 3 layers for hospital walkthroughs.
+int get kStrengthFunnelBetaExitLayer => DemoConfig.exitLayer;
 
 bool isEliminationLayer(int layer) => layer <= 5;
 
