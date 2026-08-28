@@ -6,10 +6,13 @@ import 'package:go_router/go_router.dart';
 
 
 
+import '../../features/child/presentation/guardian_handoff_screen.dart';
 import '../../features/child/presentation/child_play_launch_helper.dart';
 import '../../features/child/presentation/child_play_session_screen.dart';
 import '../../features/child/providers/child_play_session_controller.dart';
 import '../../features/dashboard/widgets/neuro_spark_dashboard.dart';
+import '../../features/guardian/presentation/guardian_settings_screen.dart';
+import '../../providers/game_environment_provider.dart';
 
 import '../../features/deepening/presentation/deepening_funnel_canvas.dart';
 
@@ -23,6 +26,7 @@ import '../../providers/intake_flow_provider.dart';
 
 import '../../screens/intake_flow_screen.dart';
 import '../../screens/login_screen.dart';
+import '../../screens/guardian_consent_screen.dart';
 import '../config/supabase_config.dart';
 
 import '../../services/intake_application_service.dart';
@@ -96,10 +100,6 @@ final routerProvider = Provider<GoRouter>((ref) {
 
       initialLocation = '/strength-funnel';
 
-    } else if (!authStatus.hasCompletedAssessment) {
-
-      initialLocation = '/assessment-canvas';
-
     } else {
 
       initialLocation = '/dashboard';
@@ -125,15 +125,33 @@ final routerProvider = Provider<GoRouter>((ref) {
 
 
 
-      if (state.matchedLocation == '/child-play') {
+      if (authStatus.isLoggedIn && state.matchedLocation == '/login') {
+        return '/consent';
+      }
+
+
+
+      const guardianOpenPaths = {
+        '/consent',
+        '/guardian-settings',
+        '/guardian-handoff',
+        '/child-play',
+        '/strength-summary',
+        '/dashboard',
+        '/assessment-canvas',
+      };
+
+      if (guardianOpenPaths.contains(state.matchedLocation)) {
         return null;
       }
 
 
 
-      if (!authStatus.hasCompletedIntake && state.matchedLocation != '/intake') {
+      if (!authStatus.hasCompletedIntake &&
+          state.matchedLocation != '/intake' &&
+          state.matchedLocation != '/consent') {
 
-        return '/intake';
+        return '/consent';
 
       }
 
@@ -152,22 +170,13 @@ final routerProvider = Provider<GoRouter>((ref) {
       }
 
 
-
       if (authStatus.hasCompletedIntake &&
 
           authStatus.hasCompletedStrengthFunnel &&
 
-          !authStatus.hasCompletedAssessment &&
+          authStatus.hasCompletedAssessment &&
 
-          state.matchedLocation != '/assessment-canvas') {
-
-        return '/assessment-canvas';
-
-      }
-
-
-
-      if (authStatus.hasCompletedAssessment && state.matchedLocation != '/dashboard') {
+          state.matchedLocation != '/dashboard') {
 
         return '/dashboard';
 
@@ -186,6 +195,14 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: '/login',
 
         builder: (context, state) => const LoginScreen(),
+
+      ),
+
+      GoRoute(
+
+        path: '/consent',
+
+        builder: (context, state) => const GuardianConsentScreen(),
 
       ),
 
@@ -276,25 +293,17 @@ final routerProvider = Provider<GoRouter>((ref) {
 
                     finalists: finalists,
 
-                    onStartPlay: () async {
+                    onStartPlay: () {
 
-                      final ok = await launchChildPlaySession(ref, finalists);
+                      if (context.mounted) {
 
-                      if (ok && context.mounted) {
-
-                        context.push('/child-play');
+                        context.push('/guardian-handoff');
 
                       }
 
                     },
 
                     onContinue: () async {
-
-                      await ref
-
-                          .read(strengthFunnelProgressServiceProvider)
-
-                          .clearFinalists();
 
                       await ref
 
@@ -319,6 +328,80 @@ final routerProvider = Provider<GoRouter>((ref) {
                       if (context.mounted) {
 
                         context.go('/assessment-canvas');
+
+                      }
+
+                    },
+
+                  );
+
+                },
+
+              );
+
+            },
+
+          );
+
+        },
+
+      ),
+
+      GoRoute(
+
+        path: '/guardian-handoff',
+
+        builder: (context, state) {
+
+          return Consumer(
+
+            builder: (context, ref, _) {
+
+              final bundle = ref.watch(gameEnvironmentProvider);
+
+              final finalistsAsync = ref.watch(strengthFunnelFinalistsProvider);
+
+              return finalistsAsync.when(
+
+                loading: () => const Scaffold(
+
+                  body: Center(child: CircularProgressIndicator()),
+
+                ),
+
+                error: (_, __) => const Scaffold(
+
+                  body: Center(child: Text('Could not load play themes.')),
+
+                ),
+
+                data: (finalists) {
+
+                  if (finalists == null || finalists.sectorIds.isEmpty) {
+
+                    WidgetsBinding.instance.addPostFrameCallback((_) {
+
+                      if (context.mounted) context.go('/strength-funnel');
+
+                    });
+
+                    return const SizedBox.shrink();
+
+                  }
+
+                  return GuardianHandoffScreen(
+
+                    childName: bundle?.parent.childName ?? '',
+
+                    onCancel: () => context.pop(),
+
+                    onReady: () async {
+
+                      final ok = await launchChildPlaySession(ref, finalists);
+
+                      if (ok && context.mounted) {
+
+                        context.go('/child-play');
 
                       }
 
@@ -413,6 +496,14 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: '/dashboard',
 
         builder: (context, state) => const NeuroSparkDashboard(),
+
+      ),
+
+      GoRoute(
+
+        path: '/guardian-settings',
+
+        builder: (context, state) => const GuardianSettingsScreen(),
 
       ),
 

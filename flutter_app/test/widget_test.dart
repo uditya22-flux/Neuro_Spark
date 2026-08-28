@@ -12,9 +12,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mindbridge_app/main.dart';
 
 void main() {
-  testWidgets('Counter increments smoke test', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
+  testWidgets('App boots without crashing', (WidgetTester tester) async {
+    await tester.binding.setSurfaceSize(const Size(800, 1200));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
     await tester.pumpWidget(const ProviderScope(child: NeuroSparkApp()));
+    await tester.pump();
 
     expect(find.byType(NeuroSparkApp), findsOneWidget);
   });

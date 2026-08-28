@@ -4,7 +4,6 @@ import 'package:go_router/go_router.dart';
 
 import '../../strength_funnel/models/riasec_sector.dart';
 import '../../strength_funnel/presentation/guardian_strength_summary_screen.dart';
-import 'child_play_launch_helper.dart';
 
 /// Guardian dashboard card — start sensory-safe play from saved finalist themes.
 class GuardianPlayLaunchCard extends ConsumerWidget {
@@ -54,18 +53,7 @@ class GuardianPlayLaunchCard extends ConsumerWidget {
                 ),
                 const SizedBox(height: 12),
                 FilledButton.icon(
-                  onPressed: () async {
-                    final ok = await launchChildPlaySession(ref, finalists);
-                    if (ok && context.mounted) {
-                      context.push('/child-play');
-                    } else if (context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('Could not start play session. Try again.'),
-                        ),
-                      );
-                    }
-                  },
+                  onPressed: () => context.push('/guardian-handoff'),
                   icon: const Icon(Icons.play_arrow_rounded),
                   label: const Text('Start play'),
                 ),

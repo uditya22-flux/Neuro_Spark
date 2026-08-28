@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import '../providers/sdui_controller.dart';
 import 'dynamic_header.dart';
 import 'visual_schedule_widget.dart';
@@ -59,6 +60,13 @@ class _NeuroSparkDashboardState extends ConsumerState<NeuroSparkDashboard> {
               backgroundColor: Colors.transparent,
               elevation: 0,
               centerTitle: false,
+              actions: [
+                IconButton(
+                  tooltip: 'Guardian account',
+                  icon: const Icon(Icons.settings_outlined),
+                  onPressed: () => context.push('/guardian-settings'),
+                ),
+              ],
             ),
             body: SafeArea(
               child: Column(

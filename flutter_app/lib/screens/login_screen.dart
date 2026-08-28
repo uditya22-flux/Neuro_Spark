@@ -62,7 +62,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       await syncAuthSessionRef(ref);
 
       if (!mounted) return;
-      context.go('/intake');
+      context.go('/consent');
     } on AuthException catch (e) {
       setState(() => _error = e.message);
     } catch (e) {
@@ -101,12 +101,33 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     }
   }
 
+  Future<void> _resetPassword() async {
+    final email = _emailController.text.trim();
+    if (email.isEmpty) {
+      setState(() => _error = 'Enter your email to reset password.');
+      return;
+    }
+
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+
+    try {
+      await Supabase.instance.client.auth.resetPasswordForEmail(email);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Password reset email sent. Check your inbox.')),
+      );
+    } on AuthException catch (e) {
+      setState(() => _error = e.message);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    final backendLabel = SupabaseConfig.isLiveBackend
-        ? SupabaseConfig.url
-        : 'offline mode';
-
     return Scaffold(
       appBar: AppBar(title: const Text('Guardian sign in')),
       body: SafeArea(
@@ -120,14 +141,16 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   Text(
-                    'MindBridge needs a guardian account before intake '
-                    'and the strength funnel sync to Supabase.',
+                    'MindBridge is a guardian-led strengths exploration platform for children. '
+                    'Sign in to begin intake and play-theme discovery.',
                     style: Theme.of(context).textTheme.bodyLarge,
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    'Backend: $backendLabel',
-                    style: Theme.of(context).textTheme.bodySmall,
+                    'Not a diagnostic or clinical screening tool.',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          fontStyle: FontStyle.italic,
+                        ),
                   ),
                   const SizedBox(height: 24),
                   TextField(
@@ -178,6 +201,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                           ? 'Already have an account? Sign in'
                           : 'Need an account? Create one',
                     ),
+                  ),
+                  TextButton(
+                    onPressed: _busy ? null : _resetPassword,
+                    child: const Text('Forgot password?'),
                   ),
                   if (SupabaseConfig.isLocalDev) ...[
                     const SizedBox(height: 8),
