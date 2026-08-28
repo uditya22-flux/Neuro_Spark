@@ -6,6 +6,9 @@ import 'package:go_router/go_router.dart';
 
 
 
+import '../../features/child/presentation/child_play_launch_helper.dart';
+import '../../features/child/presentation/child_play_session_screen.dart';
+import '../../features/child/providers/child_play_session_controller.dart';
 import '../../features/dashboard/widgets/neuro_spark_dashboard.dart';
 
 import '../../features/deepening/presentation/deepening_funnel_canvas.dart';
@@ -117,6 +120,12 @@ final routerProvider = Provider<GoRouter>((ref) {
         if (state.matchedLocation != '/login') {
           return '/login';
         }
+        return null;
+      }
+
+
+
+      if (state.matchedLocation == '/child-play') {
         return null;
       }
 
@@ -267,6 +276,18 @@ final routerProvider = Provider<GoRouter>((ref) {
 
                     finalists: finalists,
 
+                    onStartPlay: () async {
+
+                      final ok = await launchChildPlaySession(ref, finalists);
+
+                      if (ok && context.mounted) {
+
+                        context.push('/child-play');
+
+                      }
+
+                    },
+
                     onContinue: () async {
 
                       await ref
@@ -308,6 +329,32 @@ final routerProvider = Provider<GoRouter>((ref) {
                 },
 
               );
+
+            },
+
+          );
+
+        },
+
+      ),
+
+      GoRoute(
+
+        path: '/child-play',
+
+        builder: (context, state) {
+
+          return ChildPlaySessionScreen(
+
+            onSessionEnded: () async {
+
+              await ref.read(childPlaySessionControllerProvider.notifier).stop();
+
+              if (context.mounted) {
+
+                context.go('/dashboard');
+
+              }
 
             },
 

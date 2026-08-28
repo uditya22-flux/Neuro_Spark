@@ -8,6 +8,7 @@ import 'talent_growth_widget.dart';
 import 'generative_ui_console.dart';
 import '../providers/dashboard_controller.dart';
 import 'swapped_elements.dart';
+import '../../child/presentation/guardian_play_launch_card.dart';
 
 class NeuroSparkDashboard extends ConsumerStatefulWidget {
   const NeuroSparkDashboard({super.key});
@@ -85,9 +86,12 @@ class _NeuroSparkDashboardState extends ConsumerState<NeuroSparkDashboard> {
                       child: ListView.builder(
                         key: ValueKey(sduiState.activeProfileName),
                         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                        itemCount: widgetIds.length,
+                        itemCount: widgetIds.length + 1,
                         itemBuilder: (context, index) {
-                          final componentKey = widgetIds[index];
+                          if (index == 0) {
+                            return const GuardianPlayLaunchCard();
+                          }
+                          final componentKey = widgetIds[index - 1];
                           Widget widget;
                           switch (componentKey) {
                             case 'header':
