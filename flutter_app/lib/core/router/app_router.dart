@@ -293,7 +293,9 @@ final routerProvider = Provider<GoRouter>((ref) {
 
                     finalists: finalists,
 
-                    onStartPlay: () {
+                    onStartPlay: () async {
+
+                      await completeStrengthFunnelSession(ref, userId: userId);
 
                       if (context.mounted) {
 
@@ -303,27 +305,21 @@ final routerProvider = Provider<GoRouter>((ref) {
 
                     },
 
+                    onGoToDashboard: () async {
+
+                      await completeStrengthFunnelSession(ref, userId: userId);
+
+                      if (context.mounted) {
+
+                        context.go('/dashboard');
+
+                      }
+
+                    },
+
                     onContinue: () async {
 
-                      await ref
-
-                          .read(intakePersistenceServiceProvider)
-
-                          .markStrengthFunnelComplete();
-
-                      ref.read(authStatusProvider.notifier).state = AuthUserStatus(
-
-                        isLoggedIn: true,
-
-                        userId: userId,
-
-                        hasCompletedIntake: true,
-
-                        hasCompletedStrengthFunnel: true,
-
-                        hasCompletedAssessment: false,
-
-                      );
+                      await completeStrengthFunnelSession(ref, userId: userId);
 
                       if (context.mounted) {
 
@@ -526,6 +522,30 @@ final routerProvider = Provider<GoRouter>((ref) {
   );
 
 });
+
+
+
+/// Marks strength funnel complete and unlocks guardian home / child play.
+
+Future<void> completeStrengthFunnelSession(WidgetRef ref, {required String userId}) async {
+
+  await ref.read(intakePersistenceServiceProvider).markStrengthFunnelComplete();
+
+  ref.read(authStatusProvider.notifier).state = AuthUserStatus(
+
+    isLoggedIn: true,
+
+    userId: userId,
+
+    hasCompletedIntake: true,
+
+    hasCompletedStrengthFunnel: true,
+
+    hasCompletedAssessment: false,
+
+  );
+
+}
 
 
 

@@ -88,9 +88,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       await _auth.sendEmailOtp(email);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
+        SnackBar(
           content: Text(
-            'Check Inbucket at http://127.0.0.1:64324 for the OTP code.',
+            SupabaseConfig.isLiveBackend
+                ? 'Check your email for the one-time sign-in code.'
+                : 'Check Inbucket at http://127.0.0.1:64324 for the OTP code.',
           ),
         ),
       );

@@ -14,11 +14,13 @@ class GuardianStrengthSummaryScreen extends ConsumerWidget {
     required this.finalists,
     required this.onContinue,
     required this.onStartPlay,
+    required this.onGoToDashboard,
   });
 
   final StrengthFunnelFinalists finalists;
   final VoidCallback onContinue;
   final VoidCallback onStartPlay;
+  final VoidCallback onGoToDashboard;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -77,9 +79,15 @@ class GuardianStrengthSummaryScreen extends ConsumerWidget {
             label: const Text('Start child\'s play'),
           ),
           const SizedBox(height: 8),
-          OutlinedButton(
+          OutlinedButton.icon(
+            onPressed: onGoToDashboard,
+            icon: const Icon(Icons.home_outlined),
+            label: const Text('Go to guardian home'),
+          ),
+          const SizedBox(height: 8),
+          TextButton(
             onPressed: onContinue,
-            child: const Text('Continue to strength activities'),
+            child: const Text('Optional: deeper strength activities'),
           ),
         ],
       ),
