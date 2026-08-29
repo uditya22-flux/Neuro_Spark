@@ -4,6 +4,9 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/auth/auth_session_sync.dart';
 import '../../services/guardian_bootstrap_service.dart';
+import '../features/demo/presentation/demo_cheat_sheet.dart';
+import '../features/demo/providers/demo_mode_provider.dart';
+import '../features/demo/providers/demo_session_providers.dart';
 import '../features/guardian/providers/consent_providers.dart';
 import '../features/guardian/data/consent_repository.dart';
 
@@ -32,6 +35,13 @@ class _GuardianConsentScreenState extends ConsumerState<GuardianConsentScreen> {
     });
 
     try {
+      if (ref.read(demoModeProvider)) {
+        ref.read(demoConsentAcceptedProvider.notifier).state = true;
+        if (!mounted) return;
+        context.go('/intake');
+        return;
+      }
+
       await ref.read(consentRepositoryProvider).acceptConsent(consentVersionId);
       await ref.read(guardianBootstrapServiceProvider).ensureReady();
       await syncAuthSessionRef(ref);
@@ -70,6 +80,7 @@ class _GuardianConsentScreenState extends ConsumerState<GuardianConsentScreen> {
 
   Widget _buildScaffold(BuildContext context, ConsentVersion? version) {
     final theme = Theme.of(context);
+    final isDemo = ref.watch(demoModeProvider);
 
     return Scaffold(
       appBar: AppBar(title: const Text('Guardian consent')),
@@ -77,6 +88,7 @@ class _GuardianConsentScreenState extends ConsumerState<GuardianConsentScreen> {
         child: ListView(
           padding: const EdgeInsets.all(24),
           children: [
+            const DemoCheatSheet(compact: true),
             Icon(Icons.verified_user_outlined, size: 48, color: theme.colorScheme.primary),
             const SizedBox(height: 16),
             Text(
@@ -141,7 +153,9 @@ class _GuardianConsentScreenState extends ConsumerState<GuardianConsentScreen> {
             ],
             const SizedBox(height: 20),
             FilledButton(
-              onPressed: _busy || version == null ? null : () => _submit(version.id),
+              onPressed: _busy || (!isDemo && version == null)
+                  ? null
+                  : () => _submit(version?.id ?? 'demo_consent_local'),
               child: _busy
                   ? const SizedBox(
                       height: 20,

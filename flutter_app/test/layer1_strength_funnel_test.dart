@@ -73,25 +73,43 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           home: Scaffold(
-            body: Layer1SectorPromptWidget(task: task, constraints: constraints),
+            body: SingleChildScrollView(
+              child: Layer1SectorPromptWidget(
+                task: task,
+                constraints: constraints,
+                instructionStyle: InstructionStyle.pictorialGuideCards,
+                layer: 1,
+              ),
+            ),
           ),
         ),
       );
 
       expect(find.textContaining('Picture card'), findsOneWidget);
-      expect(find.textContaining('fun for you right now'), findsOneWidget);
+      expect(find.text('Step 1 · Try this activity'), findsOneWidget);
+      expect(find.text('Step 2 · How fun was it?'), findsOneWidget);
     });
   });
 
   group('StrengthFunnelMath', () {
-    test('selectAdvancingSectors picks top 60% by engagement', () {
+    test('selectAdvancingSectors advances sectors scored at or above 60%', () {
       final scores = <String, double>{
-        for (var i = 0; i < 30; i++) 'sector_$i': i / 30,
+        'r_build_fix': 0.9,
+        'i_puzzles_logic': 0.8,
+        'a_drawing_color': 0.3,
+        's_helping_caring': 0.2,
+        'e_leading_groups': 0.4,
+        'c_sorting_organizing': 0.1,
       };
-      final advancing = selectAdvancingSectors(scores, sectorsAdvancingAfterLayer(1));
-      expect(advancing.length, 18);
-      expect(advancing.first, 'sector_29');
-      expect(advancing.last, 'sector_12');
+      final advancing = selectAdvancingSectors(scores, layerNumber: 1);
+      expect(advancing.length, 2);
+      expect(advancing, ['r_build_fix', 'i_puzzles_logic']);
+    });
+
+    test('computeAdvanceCap scales with layer size not fixed 18', () {
+      expect(computeAdvanceCap(6), 4);
+      expect(computeAdvanceCap(4), 3);
+      expect(computeAdvanceCap(2), 2);
     });
   });
 
@@ -133,7 +151,7 @@ void main() {
       final state = container.read(strengthFunnelControllerProvider);
       expect(state.layerComplete, isTrue);
       expect(state.canStartNextLayer, isTrue);
-      expect(state.advancingSectorIds?.length, 3);
+      expect(state.advancingSectorIds?.length, 2);
     });
   });
 }

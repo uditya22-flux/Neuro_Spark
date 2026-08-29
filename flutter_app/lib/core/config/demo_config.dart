@@ -22,6 +22,9 @@ class DemoConfig {
   /// Set when guardian taps "Hospital demo" at runtime.
   static bool runtimeActive = false;
 
+  /// Full consent → intake → funnel (vs quick skip-to-funnel).
+  static bool guidedFullFlow = false;
+
   static bool get isActive => compileTimeEnabled || runtimeActive;
 
   static int get exitLayer => isActive ? funnelExitLayer : 10;

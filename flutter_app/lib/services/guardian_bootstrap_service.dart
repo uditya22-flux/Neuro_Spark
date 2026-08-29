@@ -10,7 +10,13 @@ class GuardianBootstrapService {
     final userId = _client.auth.currentUser?.id;
     if (userId == null) return;
 
-    await _ensureVerified(userId, verificationMethod);
+    try {
+      await _ensureVerified(userId, verificationMethod);
+    } catch (e, st) {
+      // Non-fatal: RLS or missing table must not block app launch during field testing.
+      debugPrint('[GuardianBootstrap] ensureReady skipped: $e');
+      debugPrint('$st');
+    }
   }
 
   Future<void> _ensureVerified(String userId, String method) async {
@@ -29,38 +35,6 @@ class GuardianBootstrapService {
       'verified_at': DateTime.now().toUtc().toIso8601String(),
     });
     debugPrint('[GuardianBootstrap] Recorded verified guardian.');
-  }
-
-  Future<void> _ensureActiveConsent(String userId) async {
-    final active = await _client
-        .from('guardian_consents')
-        .select('id')
-        .eq('guardian_id', userId)
-        .eq('status', 'active')
-        .maybeSingle();
-    if (active != null) return;
-
-    final consentVersion = await _client
-        .from('consent_versions')
-        .select('id')
-        .eq('active', true)
-        .order('created_at', ascending: false)
-        .limit(1)
-        .maybeSingle();
-
-    final versionId = consentVersion?['id'] as String?;
-    if (versionId == null) {
-      debugPrint('[GuardianBootstrap] No active consent version in database.');
-      return;
-    }
-
-    await _client.from('guardian_consents').insert({
-      'guardian_id': userId,
-      'consent_version_id': versionId,
-      'status': 'active',
-      'accepted_at': DateTime.now().toUtc().toIso8601String(),
-    });
-    debugPrint('[GuardianBootstrap] Recorded active consent.');
   }
 }
 

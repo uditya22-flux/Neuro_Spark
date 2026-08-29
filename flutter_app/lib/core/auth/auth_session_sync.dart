@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -24,7 +25,11 @@ Future<void> syncAuthSession(ProviderContainer container) async {
   container.read(authStatusProvider.notifier).state = _authStatusFromSession(current);
 
   if (Supabase.instance.client.auth.currentUser != null) {
-    await container.read(guardianBootstrapServiceProvider).ensureReady();
+    try {
+      await container.read(guardianBootstrapServiceProvider).ensureReady();
+    } catch (e) {
+      debugPrint('[syncAuthSession] bootstrap failed (non-fatal): $e');
+    }
   }
 }
 
@@ -35,7 +40,11 @@ Future<void> syncAuthSessionRef(WidgetRef ref) async {
   ref.read(authStatusProvider.notifier).state = _authStatusFromSession(current);
 
   if (Supabase.instance.client.auth.currentUser != null) {
-    await ref.read(guardianBootstrapServiceProvider).ensureReady();
+    try {
+      await ref.read(guardianBootstrapServiceProvider).ensureReady();
+    } catch (e) {
+      debugPrint('[syncAuthSessionRef] bootstrap failed (non-fatal): $e');
+    }
   }
 }
 

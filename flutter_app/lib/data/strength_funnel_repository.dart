@@ -133,7 +133,7 @@ class StrengthFunnelRepository {
             ? DemoConfig.representativeSectorIds
             : layerNumber == 1
                 ? allRiasecSectorIds()
-                : allRiasecSectorIds().take(sectorsAdvancingAfterLayer(1)).toList());
+                : <String>[]);
 
     final tasks = activeIds.map((id) {
       final sector = sectorById(id);
@@ -193,10 +193,7 @@ class StrengthFunnelRepository {
   }
 
   List<String> computeAdvancingLocally(Map<String, double> scores, int layerNumber) {
-    final advanceCount = DemoConfig.isActive
-        ? DemoConfig.advancingCount(scores.length)
-        : sectorsAdvancingAfterLayer(layerNumber);
-    return selectAdvancingSectors(scores, advanceCount);
+    return selectAdvancingSectors(scores, layerNumber: layerNumber);
   }
 
   /// Re-personalizes remote tasks using the child's intake profile and usage.

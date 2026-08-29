@@ -1,14 +1,16 @@
 /**
- * 60% adaptive filtering algorithm for the 10-layer RIASEC strength funnel.
+ * 60% adaptive filtering for the 10-layer RIASEC strength funnel.
  *
- * Layer 1: 30 sectors → Layer 2: 18 → Layer 3: 11 → Layer 4: 7 → Layer 5: 4
- * Layers 6–10: deep-dive (no further elimination; complexity increases).
+ * Advancement is **score-driven**: only sectors the child enjoyed (≥60% on the slider)
+ * move forward, capped at ceil(60% of sectors assessed this layer).
+ * Fixed 30→18→11 targets apply only when all 30 sectors are assessed and qualify.
  */
 
 export const TOTAL_SECTORS = 30;
 export const FILTER_RATIO = 0.6;
+export const ENGAGEMENT_ADVANCE_THRESHOLD = 0.6;
 
-/** Sector counts advancing *into* each layer (per .cursorrules §4). */
+/** Reference sector counts when the full 30-sector funnel is used (not fixed advancement). */
 export const LAYER_SECTOR_TARGETS: Record<number, number> = {
   1: 30,
   2: 18,
@@ -27,43 +29,57 @@ export interface SectorEngagement {
   engagementScore: number;
 }
 
-/** Returns how many sectors should advance after completing [layer]. */
+export function computeAdvanceCap(scoredInLayer: number): number {
+  if (scoredInLayer <= 0) return 0;
+  if (scoredInLayer === 1) return 1;
+  return Math.max(1, Math.min(scoredInLayer, Math.ceil(scoredInLayer * FILTER_RATIO)));
+}
+
+/** @deprecated Prefer computeAdvanceCap(actualScoredCount) */
 export function sectorsAdvancingAfterLayer(layer: number): number {
   if (layer >= 6) {
     return LAYER_SECTOR_TARGETS[layer] ?? 2;
   }
   return LAYER_SECTOR_TARGETS[layer + 1] ??
-    Math.max(2, Math.ceil(LAYER_SECTOR_TARGETS[layer] * FILTER_RATIO));
+    computeAdvanceCap(LAYER_SECTOR_TARGETS[layer] ?? TOTAL_SECTORS);
 }
 
-/** Returns sector count assessed at the start of [layer]. */
 export function sectorsAtLayerStart(layer: number): number {
   return LAYER_SECTOR_TARGETS[layer] ?? TOTAL_SECTORS;
 }
 
-/**
- * Selects top N sectors by engagement score (stable sort by sectorId tie-break).
- */
 export function selectAdvancingSectors(
   scores: SectorEngagement[],
-  advanceCount: number,
+  layerNumber: number,
 ): string[] {
-  return [...scores]
-    .sort((a, b) => {
-      const diff = b.engagementScore - a.engagementScore;
-      if (diff !== 0) return diff;
-      return a.sectorId.localeCompare(b.sectorId);
-    })
-    .slice(0, Math.max(0, advanceCount))
-    .map((s) => s.sectorId);
+  if (scores.length === 0) return [];
+
+  if (layerNumber >= 6) {
+    return [...scores].map((s) => s.sectorId).sort();
+  }
+
+  const ranked = [...scores].sort((a, b) => {
+    const diff = b.engagementScore - a.engagementScore;
+    if (diff !== 0) return diff;
+    return a.sectorId.localeCompare(b.sectorId);
+  });
+
+  const cap = computeAdvanceCap(scores.length);
+  const aboveThreshold = ranked.filter(
+    (s) => s.engagementScore >= ENGAGEMENT_ADVANCE_THRESHOLD,
+  );
+
+  if (aboveThreshold.length > 0) {
+    return aboveThreshold.slice(0, cap).map((s) => s.sectorId);
+  }
+
+  return ranked.slice(0, cap).map((s) => s.sectorId);
 }
 
-/** Whether this layer eliminates sectors or only deepens complexity. */
 export function isEliminationLayer(layer: number): boolean {
   return layer <= 5;
 }
 
-/** All 30 sector ids in deterministic order (matches migration seed). */
 export function allSectorIds(): string[] {
   return [
     "r_build_fix", "r_nature_outdoors", "r_sports_movement", "r_crafts_making",

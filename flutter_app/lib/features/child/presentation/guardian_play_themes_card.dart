@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../strength_funnel/models/riasec_sector.dart';
 import '../../strength_funnel/presentation/guardian_strength_summary_screen.dart';
+import '../../../core/router/app_router.dart';
 import '../../strength_funnel/presentation/widgets/sector_picture_widget.dart';
 import '../../../providers/game_environment_provider.dart';
 import '../../child/services/child_play_telemetry_service.dart';
@@ -115,6 +116,12 @@ class GuardianPlayThemesCard extends ConsumerWidget {
                   const SizedBox(height: 12),
                   _PlayActivitySummary(childId: childId),
                 ],
+                const SizedBox(height: 12),
+                OutlinedButton.icon(
+                  onPressed: () => restartStrengthFunnelExploration(ref, context),
+                  icon: const Icon(Icons.layers_rounded),
+                  label: const Text('Start 10 layers again'),
+                ),
               ],
             ),
           ),

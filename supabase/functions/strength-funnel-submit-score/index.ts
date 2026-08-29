@@ -15,7 +15,6 @@ import {
 } from "../_shared/validate.ts";
 import {
   selectAdvancingSectors,
-  sectorsAdvancingAfterLayer,
   isEliminationLayer,
   type SectorEngagement,
 } from "../_shared/strength_funnel.ts";
@@ -154,8 +153,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
           engagementScore: Number(row.engagement_score),
         }),
       );
-      const advanceCount = sectorsAdvancingAfterLayer(layerRun.layer_number);
-      advancingSectorIds = selectAdvancingSectors(engagements, advanceCount);
+      advancingSectorIds = selectAdvancingSectors(engagements, layerRun.layer_number);
       nextLayer = layerRun.layer_number + 1;
 
       await svc.from("strength_funnel_layer_runs").update({

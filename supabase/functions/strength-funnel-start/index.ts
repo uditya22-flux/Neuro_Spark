@@ -21,8 +21,7 @@ import {
 } from "../_shared/modality_router.ts";
 import {
   initialActiveSectors,
-  sectorsAdvancingAfterLayer,
-  sectorsAtLayerStart,
+  computeAdvanceCap,
 } from "../_shared/strength_funnel.ts";
 import {
   generateSectorTask,
@@ -174,8 +173,10 @@ Deno.serve(async (req: Request): Promise<Response> => {
       .eq("layer_number", layerNumber)
       .maybeSingle();
 
-    const sectorsAssessed = sectorsAtLayerStart(layerNumber);
-    const sectorsAdvancing = sectorsAdvancingAfterLayer(layerNumber);
+    const activeSectorIds = (session.active_sector_ids as string[] | null) ??
+      initialActiveSectors();
+    const sectorsAssessed = activeSectorIds.length;
+    const sectorsAdvancing = computeAdvanceCap(sectorsAssessed);
 
     if (existingRun) {
       layerRun = existingRun;
@@ -194,8 +195,6 @@ Deno.serve(async (req: Request): Promise<Response> => {
       layerRun = data;
     }
 
-    const activeSectorIds = (session.active_sector_ids as string[] | null) ??
-      initialActiveSectors();
     const { data: sectors, error: sectorError } = await svc.from("riasec_sectors")
       .select("id, riasec_type, display_name, play_theme")
       .in("id", activeSectorIds)

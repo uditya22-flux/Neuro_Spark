@@ -8,16 +8,17 @@ import 'package:mindbridge_app/services/strength_funnel_progress_service.dart';
 
 void main() {
   group('StrengthFunnelMath layer targets', () {
-    test('elimination layers follow 60% progression', () {
+    test('computeAdvanceCap follows 60% of scored sectors', () {
+      expect(computeAdvanceCap(30), 18);
+      expect(computeAdvanceCap(18), 11);
+      expect(computeAdvanceCap(11), 7);
+      expect(computeAdvanceCap(7), 5);
+      expect(computeAdvanceCap(6), 4);
+    });
+
+    test('reference layer sizes when full funnel is used', () {
       expect(sectorsAtLayerStart(1), 30);
       expect(sectorsAtLayerStart(2), 18);
-      expect(sectorsAtLayerStart(3), 11);
-      expect(sectorsAtLayerStart(4), 7);
-      expect(sectorsAtLayerStart(5), 4);
-      expect(sectorsAdvancingAfterLayer(1), 18);
-      expect(sectorsAdvancingAfterLayer(2), 11);
-      expect(sectorsAdvancingAfterLayer(3), 7);
-      expect(sectorsAdvancingAfterLayer(4), 4);
     });
 
     test('beta exit is after all ten layers', () {

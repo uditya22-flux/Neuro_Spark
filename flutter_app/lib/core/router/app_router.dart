@@ -96,9 +96,14 @@ final routerProvider = Provider<GoRouter>((ref) {
 
   String initialLocation = '/intake';
 
-  if (authStatus.userId == 'demo_guardian' && authStatus.hasCompletedIntake) {
-    initialLocation =
-        authStatus.hasCompletedStrengthFunnel ? '/dashboard' : '/demo-intro';
+  if (authStatus.userId == 'demo_guardian') {
+    if (!authStatus.hasCompletedIntake) {
+      initialLocation = '/consent';
+    } else if (!authStatus.hasCompletedStrengthFunnel) {
+      initialLocation = DemoConfig.guidedFullFlow ? '/strength-funnel' : '/demo-intro';
+    } else {
+      initialLocation = '/dashboard';
+    }
   } else if (authStatus.hasCompletedIntake) {
 
     if (!authStatus.hasCompletedStrengthFunnel) {
@@ -131,13 +136,20 @@ final routerProvider = Provider<GoRouter>((ref) {
 
 
       if (authStatus.isLoggedIn && state.matchedLocation == '/login') {
-        return authStatus.userId == 'demo_guardian' ? '/demo-intro' : '/consent';
+        if (authStatus.userId == 'demo_guardian') {
+          return authStatus.hasCompletedIntake
+              ? (DemoConfig.guidedFullFlow ? '/strength-funnel' : '/demo-intro')
+              : '/consent';
+        }
+        return '/consent';
       }
 
       final isDemoSession = authStatus.userId == 'demo_guardian';
 
       if (isDemoSession) {
         const demoOpenPaths = {
+          '/consent',
+          '/intake',
           '/demo-intro',
           '/strength-funnel',
           '/strength-summary',
@@ -150,8 +162,11 @@ final routerProvider = Provider<GoRouter>((ref) {
         if (demoOpenPaths.contains(state.matchedLocation)) {
           return null;
         }
+        if (!authStatus.hasCompletedIntake) {
+          return '/consent';
+        }
         if (!authStatus.hasCompletedStrengthFunnel) {
-          return '/demo-intro';
+          return DemoConfig.guidedFullFlow ? '/strength-funnel' : '/demo-intro';
         }
         return '/dashboard';
       }
@@ -678,5 +693,27 @@ Future<void> completeIntakeAndProceed(WidgetRef ref, BuildContext context) async
 
   }
 
+}
+
+/// Clears funnel progress and returns to Layer 1 (10-layer exploration).
+Future<void> restartStrengthFunnelExploration(WidgetRef ref, BuildContext context) async {
+  await ref.read(strengthFunnelProgressServiceProvider).clearAll();
+  await ref.read(intakePersistenceServiceProvider).markStrengthFunnelIncomplete();
+  ref.read(strengthFunnelControllerProvider.notifier).resetSession();
+
+  final current = ref.read(authStatusProvider);
+  ref.read(authStatusProvider.notifier).state = AuthUserStatus(
+    isLoggedIn: current.isLoggedIn,
+    userId: current.userId,
+    hasCompletedIntake: true,
+    hasCompletedStrengthFunnel: false,
+    hasCompletedAssessment: current.hasCompletedAssessment,
+  );
+
+  await ref.read(strengthFunnelControllerProvider.notifier).startLayer1();
+
+  if (context.mounted) {
+    context.go('/strength-funnel');
+  }
 }
 

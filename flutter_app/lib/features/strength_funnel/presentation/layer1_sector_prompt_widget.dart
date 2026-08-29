@@ -5,12 +5,15 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/theme/app_theme.dart';
 import '../../../core/config/demo_config.dart';
+import '../../../providers/game_environment_provider.dart';
+import '../../../models/intake_models.dart';
 import '../../../services/modality_router.dart';
 import '../data/strength_funnel_math.dart';
 import '../models/layer1_sector_task.dart';
 import '../models/riasec_sector.dart';
 import '../providers/strength_funnel_controller.dart';
 import 'widgets/sector_picture_widget.dart';
+import 'widgets/sector_play_activity_widget.dart';
 
 /// Layer 1 sector prompt renderer — modality chosen by ISAA routing engine.
 class Layer1SectorPromptWidget extends StatefulWidget {
@@ -18,12 +21,18 @@ class Layer1SectorPromptWidget extends StatefulWidget {
     super.key,
     required this.task,
     required this.constraints,
+    required this.instructionStyle,
+    required this.layer,
     this.onEnjoymentSelected,
+    this.onActivityCompleted,
   });
 
   final Layer1SectorTask task;
   final ModalityConstraints constraints;
+  final InstructionStyle instructionStyle;
+  final int layer;
   final ValueChanged<double>? onEnjoymentSelected;
+  final VoidCallback? onActivityCompleted;
 
   @override
   State<Layer1SectorPromptWidget> createState() => _Layer1SectorPromptWidgetState();
@@ -31,6 +40,17 @@ class Layer1SectorPromptWidget extends StatefulWidget {
 
 class _Layer1SectorPromptWidgetState extends State<Layer1SectorPromptWidget> {
   double _enjoyment = 0.5;
+  bool _activityComplete = false;
+
+  @override
+  void didUpdateWidget(covariant Layer1SectorPromptWidget oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.task.sectorId != widget.task.sectorId ||
+        oldWidget.layer != widget.layer) {
+      _activityComplete = false;
+      _enjoyment = 0.5;
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -73,25 +93,72 @@ class _Layer1SectorPromptWidgetState extends State<Layer1SectorPromptWidget> {
             else
               _PictureModalityView(task: widget.task, constraints: widget.constraints),
             const SizedBox(height: 20),
-            Text(
-              widget.task.minEnjoymentLabel,
-              style: theme.textTheme.labelMedium,
-            ),
-            Slider(
-              value: _enjoyment,
-              onChanged: (value) {
-                setState(() => _enjoyment = value);
-                if (widget.constraints.allowHaptics) {
-                  HapticFeedback.selectionClick();
-                }
-                widget.onEnjoymentSelected?.call(value);
+            SectorPlayActivityWidget(
+              sectorId: widget.task.sectorId,
+              activityLabel: widget.task.activityLabel,
+              presentMomentPrompt: widget.task.presentMomentPrompt,
+              constraints: widget.constraints,
+              instructionStyle: widget.instructionStyle,
+              layer: widget.layer,
+              onCompleted: () {
+                setState(() => _activityComplete = true);
+                widget.onActivityCompleted?.call();
               },
             ),
-            Align(
-              alignment: Alignment.centerRight,
-              child: Text(
-                widget.task.maxEnjoymentLabel,
-                style: theme.textTheme.labelMedium,
+            const SizedBox(height: 20),
+            Row(
+              children: [
+                Icon(Icons.favorite_outline_rounded,
+                    color: theme.colorScheme.secondary, size: 20),
+                const SizedBox(width: 8),
+                Text(
+                  'Step 2 · How fun was it?',
+                  style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              _activityComplete
+                  ? widget.task.presentMomentPrompt
+                  : 'Finish the activity above first.',
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: _activityComplete
+                    ? null
+                    : theme.colorScheme.onSurface.withValues(alpha: 0.55),
+              ),
+            ),
+            const SizedBox(height: 12),
+            Opacity(
+              opacity: _activityComplete ? 1 : 0.45,
+              child: IgnorePointer(
+                ignoring: !_activityComplete,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      widget.task.minEnjoymentLabel,
+                      style: theme.textTheme.labelMedium,
+                    ),
+                    Slider(
+                      value: _enjoyment,
+                      onChanged: (value) {
+                        setState(() => _enjoyment = value);
+                        if (widget.constraints.allowHaptics) {
+                          HapticFeedback.selectionClick();
+                        }
+                        widget.onEnjoymentSelected?.call(value);
+                      },
+                    ),
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: Text(
+                        widget.task.maxEnjoymentLabel,
+                        style: theme.textTheme.labelMedium,
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
           ],
@@ -315,17 +382,24 @@ class StrengthFunnelScreen extends ConsumerStatefulWidget {
 
 class _StrengthFunnelScreenState extends ConsumerState<StrengthFunnelScreen> {
   double _enjoyment = 0.5;
-  bool _initialized = false;
+  bool _activityComplete = false;
 
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!_initialized) {
-        _initialized = true;
-        ref.read(strengthFunnelControllerProvider.notifier).initializeFunnel();
-      }
-    });
+    WidgetsBinding.instance.addPostFrameCallback((_) => _bootFunnel());
+  }
+
+  Future<void> _bootFunnel() async {
+    final funnel = ref.read(strengthFunnelControllerProvider);
+    if (funnel.tasks.isNotEmpty || funnel.loading) return;
+    await ref.read(strengthFunnelControllerProvider.notifier).initializeFunnel();
+    if (mounted) {
+      setState(() {
+        _enjoyment = 0.5;
+        _activityComplete = false;
+      });
+    }
   }
 
   Future<void> _submitAndAdvance() async {
@@ -338,12 +412,20 @@ class _StrengthFunnelScreenState extends ConsumerState<StrengthFunnelScreen> {
       return;
     }
 
-    setState(() => _enjoyment = 0.5);
+    setState(() {
+      _enjoyment = 0.5;
+      _activityComplete = false;
+    });
   }
 
   Future<void> _continueToNextLayer() async {
     await ref.read(strengthFunnelControllerProvider.notifier).startNextLayer();
-    if (mounted) setState(() => _enjoyment = 0.5);
+    if (mounted) {
+      setState(() {
+        _enjoyment = 0.5;
+        _activityComplete = false;
+      });
+    }
   }
 
   @override
@@ -357,8 +439,8 @@ class _StrengthFunnelScreenState extends ConsumerState<StrengthFunnelScreen> {
       appBar: AppBar(
         title: Text(
           isDeepDiveLayer(layer)
-              ? 'Deep dive · Layer $layer'
-              : 'Layer $layer · Strength Exploration',
+              ? 'Deep dive · Layer $layer of $kStrengthFunnelBetaExitLayer'
+              : 'Layer $layer of $kStrengthFunnelBetaExitLayer',
         ),
         actions: [
           if (DemoConfig.isActive)
@@ -390,7 +472,7 @@ class _StrengthFunnelScreenState extends ConsumerState<StrengthFunnelScreen> {
                   ? _LayerCompleteView(
                       completedLayer: layer,
                       advancingCount: funnel.advancingSectorIds?.length ??
-                          sectorsAdvancingDisplayCount(layer),
+                          sectorsAdvancingDisplayCount(layer, funnel.scoredCount),
                       onContinue: _continueToNextLayer,
                     )
                   : funnel.layerComplete && funnel.readyForAssessment
@@ -400,42 +482,58 @@ class _StrengthFunnelScreenState extends ConsumerState<StrengthFunnelScreen> {
                         )
                       : task == null || constraints == null
                           ? const Center(child: Text('No sectors available.'))
-                          : ListView(
-                              padding: const EdgeInsets.all(20),
-                              children: [
-                                Text(
-                                  'Layer $layer · ${funnel.totalTasks} play themes · '
-                                  'sector ${funnel.scoredCount + 1} of ${funnel.totalTasks}',
-                                  style: Theme.of(context).textTheme.labelLarge,
-                                ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  'How much fun is this activity right now?',
-                                  style: Theme.of(context).textTheme.bodyMedium,
-                                ),
-                                if (kDebugMode) ...[
-                                  const SizedBox(height: 12),
-                                  _RoutingDebugCard(
-                                    constraints: constraints,
-                                    modality: task.rendererModality,
-                                  ),
-                                ],
-                                const SizedBox(height: 16),
-                                Layer1SectorPromptWidget(
-                                  task: task,
-                                  constraints: constraints,
-                                  onEnjoymentSelected: (value) => _enjoyment = value,
-                                ),
-                                const SizedBox(height: 24),
-                                FilledButton(
-                                  onPressed: funnel.loading ? null : _submitAndAdvance,
-                                  child: Text(
-                                    funnel.scoredCount + 1 >= funnel.totalTasks
-                                        ? 'Finish Layer $layer'
-                                        : 'Next sector',
-                                  ),
-                                ),
-                              ],
+                          : Builder(
+                              builder: (context) {
+                                final bundle = ref.watch(gameEnvironmentProvider);
+                                final instructionStyle = bundle?.config.instructionStyle ??
+                                    InstructionStyle.pictorialGuideCards;
+
+                                return ListView(
+                                  padding: const EdgeInsets.all(20),
+                                  children: [
+                                    Text(
+                                      'Layer $layer · ${funnel.totalTasks} play themes · '
+                                      'theme ${funnel.scoredCount + 1} of ${funnel.totalTasks}',
+                                      style: Theme.of(context).textTheme.labelLarge,
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      'Child tries a short activity, then rates how fun it feels right now.',
+                                      style: Theme.of(context).textTheme.bodyMedium,
+                                    ),
+                                    const SizedBox(height: 12),
+                                    _IsaaCustomizationBanner(
+                                      constraints: constraints,
+                                      modality: task.rendererModality,
+                                      instructionStyle: instructionStyle,
+                                      personalizationReason: task.personalizationReason,
+                                      childName: bundle?.parent.childName,
+                                    ),
+                                    const SizedBox(height: 16),
+                                    Layer1SectorPromptWidget(
+                                      task: task,
+                                      constraints: constraints,
+                                      instructionStyle: instructionStyle,
+                                      layer: layer,
+                                      onEnjoymentSelected: (value) => _enjoyment = value,
+                                      onActivityCompleted: () {
+                                        if (mounted) setState(() => _activityComplete = true);
+                                      },
+                                    ),
+                                    const SizedBox(height: 24),
+                                    FilledButton(
+                                      onPressed: funnel.loading || !_activityComplete
+                                          ? null
+                                          : _submitAndAdvance,
+                                      child: Text(
+                                        funnel.scoredCount + 1 >= funnel.totalTasks
+                                            ? 'Finish Layer $layer'
+                                            : 'Next play theme',
+                                      ),
+                                    ),
+                                  ],
+                                );
+                              },
                             ),
     );
   }
@@ -474,7 +572,7 @@ class _LayerCompleteView extends StatelessWidget {
           const SizedBox(height: 8),
           Text(
             isEliminationLayer(completedLayer)
-                ? 'Top $advancingCount play themes carry forward to Layer ${completedLayer + 1}.'
+                ? 'Play themes your child enjoyed (≥60% fun) carry forward to Layer ${completedLayer + 1}.'
                 : 'Layer ${completedLayer + 1} goes deeper into what feels most fun right now.',
             textAlign: TextAlign.center,
           ),
@@ -537,6 +635,104 @@ class _FunnelPhaseCompleteView extends StatelessWidget {
         ],
       ),
     );
+  }
+}
+
+class _IsaaCustomizationBanner extends StatelessWidget {
+  const _IsaaCustomizationBanner({
+    required this.constraints,
+    required this.modality,
+    required this.instructionStyle,
+    this.personalizationReason,
+    this.childName,
+  });
+
+  final ModalityConstraints constraints;
+  final String modality;
+  final InstructionStyle instructionStyle;
+  final String? personalizationReason;
+  final String? childName;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final name = childName?.trim().isNotEmpty == true ? childName!.trim() : 'your child';
+
+    return Card(
+      color: theme.colorScheme.secondaryContainer.withValues(alpha: 0.35),
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.tune_rounded, size: 18, color: theme.colorScheme.primary),
+                const SizedBox(width: 8),
+                Text(
+                  'Customized for $name (ISAA + parent intake)',
+                  style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              children: [
+                Chip(
+                  label: Text(_modalityLabel(modality)),
+                  visualDensity: VisualDensity.compact,
+                ),
+                Chip(
+                  label: Text(_instructionLabel(instructionStyle)),
+                  visualDensity: VisualDensity.compact,
+                ),
+                if (constraints.useSimpleConcreteDrawings)
+                  const Chip(
+                    label: Text('Simple drawings · no faces'),
+                    visualDensity: VisualDensity.compact,
+                  ),
+                if (constraints.disableAnimations)
+                  const Chip(
+                    label: Text('Calm motion'),
+                    visualDensity: VisualDensity.compact,
+                  ),
+                if (constraints.allowHaptics)
+                  const Chip(
+                    label: Text('Touch feedback on'),
+                    visualDensity: VisualDensity.compact,
+                  ),
+                if (personalizationReason != null)
+                  Chip(
+                    avatar: Icon(Icons.star_outline, size: 14, color: theme.colorScheme.primary),
+                    label: Text(personalizationReason!),
+                    visualDensity: VisualDensity.compact,
+                  ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  String _modalityLabel(String modality) {
+    return switch (modality) {
+      'text' => 'Text prompts',
+      'video' => 'Silent video',
+      'haptic' => 'Touch & glow',
+      _ => 'Picture cards',
+    };
+  }
+
+  String _instructionLabel(InstructionStyle style) {
+    return switch (style) {
+      InstructionStyle.pureVisualGlowHints => 'Visual-only hints',
+      InstructionStyle.gentleAudioGuide => 'Gentle audio guide',
+      InstructionStyle.simpleText => 'Simple text',
+      InstructionStyle.pictorialGuideCards => 'Picture guide cards',
+    };
   }
 }
 

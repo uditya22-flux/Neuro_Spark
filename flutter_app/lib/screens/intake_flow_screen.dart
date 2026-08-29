@@ -5,6 +5,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/theme/app_theme.dart';
 import '../../models/intake_models.dart';
 import '../../core/router/app_router.dart';
+import '../../features/demo/presentation/demo_cheat_sheet.dart';
+import '../../features/demo/providers/demo_mode_provider.dart';
 import '../../providers/intake_flow_provider.dart';
 import 'intake/widgets/clinical_intake_step.dart';
 import 'intake/widgets/environment_preview_step.dart';
@@ -30,6 +32,13 @@ class _IntakeFlowScreenState extends ConsumerState<IntakeFlowScreen> {
   void initState() {
     super.initState();
     _pageController = PageController();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final isDemo = ref.read(demoModeProvider);
+      if (isDemo) {
+        ref.read(intakeFlowProvider.notifier).seedFromDemoPrefills();
+      }
+    });
   }
 
   @override
@@ -103,6 +112,7 @@ class _IntakeFlowScreenState extends ConsumerState<IntakeFlowScreen> {
       body: SafeArea(
         child: Column(
           children: [
+            const DemoCheatSheet(),
             Expanded(
               child: PageView(
                 controller: _pageController,

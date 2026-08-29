@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>MindBridge — Field Test Intake Data Sheet</title>
+  <style>
+    @page { size: A4; margin: 14mm; }
+    * { box-sizing: border-box; }
+    body {
+      font-family: "Segoe UI", system-ui, sans-serif;
+      font-size: 10.5pt;
+      line-height: 1.45;
+      color: #1a1a1a;
+      max-width: 210mm;
+      margin: 0 auto;
+      padding: 12mm;
+    }
+    h1 { font-size: 18pt; margin: 0 0 4px; color: #2d5a3d; }
+    h2 { font-size: 12pt; margin: 18px 0 8px; color: #2d5a3d; border-bottom: 2px solid #c8e6c9; padding-bottom: 4px; }
+    h3 { font-size: 10.5pt; margin: 12px 0 6px; }
+    .subtitle { color: #555; margin-bottom: 14px; }
+    .box { background: #f5faf6; border: 1px solid #b8d4be; border-radius: 6px; padding: 10px 12px; margin: 8px 0; }
+    .warn { background: #fff8e1; border-color: #ffe082; }
+    table { width: 100%; border-collapse: collapse; margin: 8px 0 14px; font-size: 9.5pt; }
+    th, td { border: 1px solid #ccc; padding: 5px 7px; text-align: left; vertical-align: top; }
+    th { background: #e8f5e9; font-weight: 600; }
+    .profile { page-break-inside: avoid; margin-bottom: 16px; }
+    .profile-name { font-weight: 700; font-size: 11pt; color: #1b5e20; }
+    .expect { background: #e3f2fd; }
+    code { background: #eee; padding: 1px 4px; border-radius: 3px; font-size: 9pt; }
+    .check { width: 14px; height: 14px; border: 1px solid #666; display: inline-block; margin-right: 6px; }
+    ul { margin: 4px 0; padding-left: 18px; }
+    .footer { margin-top: 20px; font-size: 8.5pt; color: #666; border-top: 1px solid #ddd; padding-top: 8px; }
+    @media print {
+      body { padding: 0; }
+      .no-print { display: none; }
+      .profile { page-break-inside: avoid; }
+    }
+  </style>
+</head>
+<body>
+
+<p class="no-print box warn"><strong>Save as PDF:</strong> Open this file in Chrome → Press <kbd>Ctrl+P</kbd> → Destination: <strong>Save as PDF</strong> → Save.</p>
+
+<h1>MindBridge — Field Test Intake Data Sheet</h1>
+<p class="subtitle">Give this sheet to guardians during tablet testing. Enter the values in the app intake screens, then check that customization appears in the strength funnel.</p>
+
+<div class="box">
+  <strong>App login (field test)</strong><br />
+  Tap <strong>Field test sign-in</strong> on the login screen (one tap).<br />
+  Or email: <code>mindbridge.pilot.test@gmail.com</code> · Password: <code>MindBridge2026!</code><br /><br />
+  <strong>Flow:</strong> Sign in → Consent (check box) → Intake (3 steps) → Strength funnel (10 layers) → Child play
+</div>
+
+<h2>ISAA score guide (Clinical step — sliders 1 to 5)</h2>
+<table>
+  <tr><th>Score</th><th>Meaning in app</th></tr>
+  <tr><td>1</td><td>Minimal support need in that domain</td></tr>
+  <tr><td>2</td><td>Mild</td></tr>
+  <tr><td>3</td><td>Moderate (default / balanced test)</td></tr>
+  <tr><td>4</td><td>Elevated support need</td></tr>
+  <tr><td>5</td><td>High support need</td></tr>
+</table>
+
+<h2>Parent step — pick exact options from the app</h2>
+<table>
+  <tr><th>Field</th><th>Options in app</th></tr>
+  <tr><td>Hyper-fixation</td><td>Trains &amp; Vehicles · Space &amp; Astronomy · Geometry &amp; Patterns · Animals &amp; Nature · Clocks &amp; Numbers</td></tr>
+  <tr><td>Sound triggers</td><td>High-frequency beeps · Sudden loud chime · Background music loops · Voice-over narration · Applause or cheering</td></tr>
+  <tr><td>Visual triggers</td><td>Rapid flashing · High contrast red/yellow · Parallax scrolling · Floating UI elements · Busy animated backgrounds</td></tr>
+  <tr><td>Vibration</td><td>Prefers haptics · No vibrations · Neutral</td></tr>
+</table>
+
+<h2>What to look for after intake (Environment preview + funnel)</h2>
+<ul>
+  <li><strong>Environment preview</strong> (step 3): theme skin, audio mode, instruction style, haptics on/off</li>
+  <li><strong>Strength funnel banner:</strong> “Customized for [child name] (ISAA + parent intake)” with chips (Picture cards, Visual-only hints, etc.)</li>
+  <li><strong>Each theme:</strong> Step 1 = try activity (tap/stack/sort) → Step 2 = rate how fun (slider unlocks after trying)</li>
+  <li><strong>App bar:</strong> Layer X of 10 (use Field test sign-in, not Hospital demo)</li>
+</ul>
+
+<h2>Ready-made test profiles (copy into the app)</h2>
+
+<div class="profile">
+  <p class="profile-name">Profile A — “Picture-first” (low verbal, sensory cautious)</p>
+  <p><em>Use to verify: picture cards, no heavy reading, muted sound, calm theme.</em></p>
+  <table>
+    <tr><th colspan="2">Parent personalization</th></tr>
+    <tr><td>Child name</td><td><strong>Arjun</strong></td></tr>
+    <tr><td>Age</td><td><strong>9</strong></td></tr>
+    <tr><td>Hyper-fixation</td><td><strong>Geometry &amp; Patterns</strong></td></tr>
+    <tr><td>Sound triggers</td><td>☑ Sudden loud chime</td></tr>
+    <tr><td>Visual triggers</td><td>☑ Busy animated backgrounds</td></tr>
+    <tr><td>Vibration</td><td><strong>Neutral</strong></td></tr>
+    <tr><th colspan="2">ISAA clinical sliders</th></tr>
+    <tr><td>Social Relationship</td><td>3</td></tr>
+    <tr><td>Emotional Responsiveness</td><td>3</td></tr>
+    <tr><td>Speech &amp; Communication</td><td><strong>5</strong></td></tr>
+    <tr><td>Behavior Patterns</td><td>3</td></tr>
+    <tr><td>Sensory Aspects</td><td><strong>4</strong></td></tr>
+    <tr><td>Cognitive Component</td><td>2</td></tr>
+    <tr class="expect"><th>You should see</th><td>Picture cards · Visual-only hints · Completely muted · Calm dark palette · Touch feedback on · “Simple drawings · no faces” chip</td></tr>
+  </table>
+</div>
+
+<div class="profile">
+  <p class="profile-name">Profile B — “Verbal / text-friendly”</p>
+  <p><em>Use to verify: text prompts allowed, simple text instructions, sound effects OK.</em></p>
+  <table>
+    <tr><th colspan="2">Parent personalization</th></tr>
+    <tr><td>Child name</td><td><strong>Meera</strong></td></tr>
+    <tr><td>Age</td><td><strong>10</strong></td></tr>
+    <tr><td>Hyper-fixation</td><td><strong>Clocks &amp; Numbers</strong></td></tr>
+    <tr><td>Sound triggers</td><td>(none checked)</td></tr>
+    <tr><td>Visual triggers</td><td>(none checked)</td></tr>
+    <tr><td>Vibration</td><td><strong>Neutral</strong></td></tr>
+    <tr><th colspan="2">ISAA clinical sliders</th></tr>
+    <tr><td>Social Relationship</td><td>2</td></tr>
+    <tr><td>Emotional Responsiveness</td><td>2</td></tr>
+    <tr><td>Speech &amp; Communication</td><td><strong>2</strong></td></tr>
+    <tr><td>Behavior Patterns</td><td>2</td></tr>
+    <tr><td>Sensory Aspects</td><td>2</td></tr>
+    <tr><td>Cognitive Component</td><td><strong>4</strong></td></tr>
+    <tr class="expect"><th>You should see</th><td>Text prompt modality · Simple text instructions · Subtle sound effects · Soft pastel · Higher starting difficulty (tier 3)</td></tr>
+  </table>
+</div>
+
+<div class="profile">
+  <p class="profile-name">Profile C — “High sensory + touch”</p>
+  <p><em>Use to verify: muted audio, haptics, calm motion, picture/haptic routing.</em></p>
+  <table>
+    <tr><th colspan="2">Parent personalization</th></tr>
+    <tr><td>Child name</td><td><strong>Kabir</strong></td></tr>
+    <tr><td>Age</td><td><strong>8</strong></td></tr>
+    <tr><td>Hyper-fixation</td><td><strong>Animals &amp; Nature</strong></td></tr>
+    <tr><td>Sound triggers</td><td>☑ High-frequency beeps · ☑ Sudden loud chime</td></tr>
+    <tr><td>Visual triggers</td><td>☑ Rapid flashing · ☑ Floating UI elements</td></tr>
+    <tr><td>Vibration</td><td><strong>Prefers haptics</strong></td></tr>
+    <tr><th colspan="2">ISAA clinical sliders</th></tr>
+    <tr><td>Social Relationship</td><td>4</td></tr>
+    <tr><td>Emotional Responsiveness</td><td>4</td></tr>
+    <tr><td>Speech &amp; Communication</td><td><strong>4</strong></td></tr>
+    <tr><td>Behavior Patterns</td><td>4</td></tr>
+    <tr><td>Sensory Aspects</td><td><strong>5</strong></td></tr>
+    <tr><td>Cognitive Component</td><td>3</td></tr>
+    <tr class="expect"><th>You should see</th><td>Touch &amp; glow or picture cards · Visual-only hints · Completely muted · Calm dark · Touch feedback on · Calm motion chip</td></tr>
+  </table>
+</div>
+
+<div class="profile">
+  <p class="profile-name">Profile D — “Trains theme”</p>
+  <p><em>Use to verify: hyper-fixation changes visual theme (terracotta train skin).</em></p>
+  <table>
+    <tr><th colspan="2">Parent personalization</th></tr>
+    <tr><td>Child name</td><td><strong>Riya</strong></td></tr>
+    <tr><td>Age</td><td><strong>11</strong></td></tr>
+    <tr><td>Hyper-fixation</td><td><strong>Trains &amp; Vehicles</strong></td></tr>
+    <tr><td>Sound triggers</td><td>☑ Background music loops</td></tr>
+    <tr><td>Visual triggers</td><td>(none)</td></tr>
+    <tr><td>Vibration</td><td><strong>Prefers haptics</strong></td></tr>
+    <tr><th colspan="2">ISAA clinical sliders</th></tr>
+    <tr><td>All six domains</td><td>3 each</td></tr>
+    <tr class="expect"><th>You should see</th><td>Asset theme <strong>terracotta_train</strong> on environment preview · Picture cards · Muted (sound trigger checked) · Touch feedback on</td></tr>
+  </table>
+</div>
+
+<div class="profile">
+  <p class="profile-name">Profile E — “Balanced baseline”</p>
+  <p><em>Default comparison — space theme, picture guide cards.</em></p>
+  <table>
+    <tr><th colspan="2">Parent personalization</th></tr>
+    <tr><td>Child name</td><td><strong>Dev</strong></td></tr>
+    <tr><td>Age</td><td><strong>9</strong></td></tr>
+    <tr><td>Hyper-fixation</td><td><strong>Space &amp; Astronomy</strong></td></tr>
+    <tr><td>Sound / visual triggers</td><td>(none)</td></tr>
+    <tr><td>Vibration</td><td><strong>Neutral</strong></td></tr>
+    <tr><th colspan="2">ISAA clinical sliders</th></tr>
+    <tr><td>All six domains</td><td>3 each</td></tr>
+    <tr class="expect"><th>You should see</th><td>cosmic_space theme · Pictorial guide cards · Ambient binaural soft · Picture cards · Soft pastel palette</td></tr>
+  </table>
+</div>
+
+<h2 style="page-break-before: always;">Blank form — real child (fill and enter in app)</h2>
+<p>Guardian completes this on paper first, then types the same values into the tablet.</p>
+
+<table>
+  <tr><th colspan="2">Consent</th></tr>
+  <tr><td>Guardian name (optional note)</td><td style="height:28px"></td></tr>
+  <tr><td>Consent checkbox in app</td><td>☐ Done</td></tr>
+</table>
+
+<table>
+  <tr><th colspan="2">Parent personalization</th></tr>
+  <tr><td>Child's preferred name</td><td style="height:28px"></td></tr>
+  <tr><td>Age (7–12)</td><td style="height:28px"></td></tr>
+  <tr><td>Hyper-fixation (circle one)</td><td>Trains · Space · Geometry · Animals · Clocks</td></tr>
+  <tr><td>Sound triggers (check all that apply)</td><td>☐ Beeps ☐ Chime ☐ Music ☐ Voice-over ☐ Applause</td></tr>
+  <tr><td>Visual triggers (check all)</td><td>☐ Flashing ☐ Red/yellow ☐ Parallax ☐ Floating UI ☐ Busy backgrounds</td></tr>
+  <tr><td>Vibration</td><td>☐ Prefers haptics ☐ No vibrations ☐ Neutral</td></tr>
+</table>
+
+<table>
+  <tr><th>ISAA domain</th><th>Score (1–5)</th></tr>
+  <tr><td>Social Relationship</td><td style="height:24px"></td></tr>
+  <tr><td>Emotional Responsiveness</td><td></td></tr>
+  <tr><td>Speech &amp; Communication</td><td></td></tr>
+  <tr><td>Behavior Patterns</td><td></td></tr>
+  <tr><td>Sensory Aspects</td><td></td></tr>
+  <tr><td>Cognitive Component</td><td></td></tr>
+</table>
+
+<table>
+  <tr><th>After intake — tester notes (what you saw)</th></tr>
+  <tr><td style="height:80px">Environment preview theme / audio / instructions:</td></tr>
+  <tr><td style="height:60px">Funnel banner chips:</td></tr>
+  <tr><td style="height:60px">Layer 1 — activity + fun rating worked? ☐ Yes ☐ No</td></tr>
+</table>
+
+<div class="footer">
+  MindBridge private beta · Strengths exploration only · Not diagnostic · Generated for field testing · Neuro_Spark repo · docs/INTAKE_TEST_DATA_SHEET.html
+</div>
+
+</body>
+</html>

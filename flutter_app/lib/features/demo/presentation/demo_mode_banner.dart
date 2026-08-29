@@ -97,9 +97,9 @@ class DemoIntroScreen extends StatelessWidget {
                     children: [
                       Text('You will see:', style: theme.textTheme.titleSmall),
                       const SizedBox(height: 8),
-                      _step('1', '6 play-theme cards (one per RIASEC type) with picture-first routing'),
-                      _step('2', '60% adaptive filter narrowing to top themes'),
-                      _step('3', 'Guardian summary → child handoff → sensory-safe play'),
+                      _step('1', 'Consent → ISAA intake → parent personalization (answers pre-filled)'),
+                      _step('2', '6 play-theme picture cards (one per RIASEC type)'),
+                      _step('3', '60% adaptive filter → guardian summary → child play'),
                     ],
                   ),
                 ),

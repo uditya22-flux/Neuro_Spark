@@ -12,8 +12,8 @@ import 'providers/game_environment_provider.dart';
 import 'core/router/app_router.dart';
 import 'core/config/demo_config.dart';
 import 'features/demo/presentation/demo_mode_banner.dart';
-import 'features/demo/data/demo_intake_bundle.dart';
 import 'features/demo/providers/demo_mode_provider.dart';
+import 'providers/intake_flow_provider.dart';
 import 'services/intake_persistence_service.dart';
 
 void main() async {
@@ -34,17 +34,23 @@ void main() async {
 
   // Restore persisted intake customization + flow progress before first frame.
   await restorePersistedIntakeSession(container);
-  await syncAuthSession(container);
+  try {
+    await syncAuthSession(container);
+  } catch (e, st) {
+    debugPrint('[main] syncAuthSession failed (non-fatal): $e');
+    debugPrint('$st');
+  }
   bindSupabaseAuthListener(container);
 
   if (DemoConfig.compileTimeEnabled) {
     DemoConfig.runtimeActive = true;
+    DemoConfig.guidedFullFlow = true;
     container.read(demoModeProvider.notifier).state = true;
-    container.read(gameEnvironmentProvider.notifier).set(buildDemoIntakeBundle());
+    container.read(intakeFlowProvider.notifier).seedFromDemoPrefills();
     container.read(authStatusProvider.notifier).state = const AuthUserStatus(
       isLoggedIn: true,
       userId: 'demo_guardian',
-      hasCompletedIntake: true,
+      hasCompletedIntake: false,
       hasCompletedStrengthFunnel: false,
       hasCompletedAssessment: false,
     );

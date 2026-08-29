@@ -319,6 +319,10 @@ class StrengthFunnelController extends StateNotifier<StrengthFunnelState> {
 
   Future<void> clearProgress() => _progressService.clear();
 
+  void resetSession() {
+    state = const StrengthFunnelState();
+  }
+
   Future<void> persistFinalists(List<String> sectorIds) async {
     await _progressService.saveFinalists(
       StrengthFunnelFinalists(

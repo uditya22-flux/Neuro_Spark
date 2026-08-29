@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../providers/sdui_controller.dart';
+import '../../../core/router/app_router.dart';
 import 'dynamic_header.dart';
 import 'visual_schedule_widget.dart';
 import 'emotion_hub_widget.dart';
@@ -95,18 +96,35 @@ class _NeuroSparkDashboardState extends ConsumerState<NeuroSparkDashboard> {
                       child: ListView.builder(
                         key: ValueKey(sduiState.activeProfileName),
                         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                        itemCount: widgetIds.length + 2,
+                        itemCount: widgetIds.length + 3,
                         itemBuilder: (context, index) {
                           if (index == 0) {
-                            return const GuardianPlayThemesCard();
+                            return Padding(
+                              padding: const EdgeInsets.only(bottom: 12),
+                              child: FilledButton.icon(
+                                onPressed: () => restartStrengthFunnelExploration(ref, context),
+                                icon: const Icon(Icons.layers_rounded, size: 28),
+                                label: const Text(
+                                  '10-LAYER STRENGTH FUNNEL',
+                                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                                ),
+                                style: FilledButton.styleFrom(
+                                  minimumSize: const Size(double.infinity, 56),
+                                  padding: const EdgeInsets.symmetric(vertical: 16),
+                                ),
+                              ),
+                            );
                           }
                           if (index == 1) {
+                            return const GuardianPlayThemesCard();
+                          }
+                          if (index == 2) {
                             return const Padding(
                               padding: EdgeInsets.only(bottom: 12),
                               child: GuardianPlayLaunchCard(),
                             );
                           }
-                          final componentKey = widgetIds[index - 2];
+                          final componentKey = widgetIds[index - 3];
                           Widget widget;
                           switch (componentKey) {
                             case 'header':

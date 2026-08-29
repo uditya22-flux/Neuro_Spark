@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../features/demo/data/demo_intake_prefills.dart';
 import '../models/intake_models.dart';
 import '../services/environment_compiler_service.dart';
 
@@ -93,6 +94,19 @@ class IntakeFlowNotifier extends StateNotifier<IntakeFlowState> {
 
   void previousStep() {
     goToStep(state.currentStep - 1);
+  }
+
+  /// Pre-fills intake forms with hospital demo answers (Aarav profile).
+  void seedFromDemoPrefills() {
+    state = IntakeFlowState(
+      currentStep: state.currentStep,
+      clinical: DemoIntakePrefills.clinical,
+      parent: DemoIntakePrefills.parent,
+      compiledConfig: _compiler.compileEnvironment(
+        DemoIntakePrefills.clinical,
+        DemoIntakePrefills.parent,
+      ),
+    );
   }
 }
 

@@ -45,6 +45,11 @@ class IntakePersistenceService {
     await prefs.setBool(_strengthFunnelCompleteKey, true);
   }
 
+  Future<void> markStrengthFunnelIncomplete() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_strengthFunnelCompleteKey, false);
+  }
+
   Future<void> markAssessmentComplete() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_assessmentCompleteKey, true);
